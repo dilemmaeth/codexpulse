@@ -19,6 +19,7 @@ $pairScript = Join-Path $PSScriptRoot 'codexpulse-pair.mjs'
 $publishScript = Join-Path $PSScriptRoot 'codexpulse-publish.mjs'
 $runScript = Join-Path $PSScriptRoot 'codexpulse-run.mjs'
 $taskName = 'CodexPulse Sync'
+$userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
 & $nodePath $syncScript --initialize --force --app-url $AppUrl --data-url './codexpulse-data.enc.json' --repository-url $RepositoryUrl
 if ($LASTEXITCODE -ne 0) { throw 'A kezdeti CodexPulse szinkron sikertelen.' }
@@ -28,7 +29,7 @@ if ($LASTEXITCODE -ne 0) { throw 'A CodexPulse párosító létrehozása sikerte
 if ($LASTEXITCODE -ne 0) { throw 'A kezdeti CodexPulse publikálás sikertelen.' }
 
 $action = New-ScheduledTaskAction -Execute $nodePath -Argument ('"{0}"' -f $runScript) -WorkingDirectory $projectRoot
-$logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
 $periodicTriggers = for ($hour = 0; $hour -lt 24; $hour += $IntervalHours) {
   New-ScheduledTaskTrigger -Daily -At ('{0:D2}:00' -f $hour)
 }
@@ -40,7 +41,7 @@ $settings = New-ScheduledTaskSettingsSet `
   -IdleWaitTimeout (New-TimeSpan -Hours 1) `
   -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
   -MultipleInstances IgnoreNew
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+$principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Settings $settings -Principal $principal -Description 'CodexPulse: titkosított Codex-statisztika frissítése bejelentkezéskor és üresjáratban.' -Force | Out-Null
 Write-Output "CodexPulse ütemezés elkészült: $taskName"
