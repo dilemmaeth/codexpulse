@@ -16,6 +16,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $nodePath = (Get-Command node.exe -ErrorAction Stop).Source
 $syncScript = Join-Path $PSScriptRoot 'codexpulse-sync.mjs'
 $pairScript = Join-Path $PSScriptRoot 'codexpulse-pair.mjs'
+$publishScript = Join-Path $PSScriptRoot 'codexpulse-publish.mjs'
 $runScript = Join-Path $PSScriptRoot 'codexpulse-run.mjs'
 $taskName = 'CodexPulse Sync'
 
@@ -23,6 +24,8 @@ $taskName = 'CodexPulse Sync'
 if ($LASTEXITCODE -ne 0) { throw 'A kezdeti CodexPulse szinkron sikertelen.' }
 & $nodePath $pairScript --app-url $AppUrl --data-url './codexpulse-data.enc.json'
 if ($LASTEXITCODE -ne 0) { throw 'A CodexPulse párosító létrehozása sikertelen.' }
+& $nodePath $publishScript
+if ($LASTEXITCODE -ne 0) { throw 'A kezdeti CodexPulse publikálás sikertelen.' }
 
 $action = New-ScheduledTaskAction -Execute $nodePath -Argument ('"{0}"' -f $runScript) -WorkingDirectory $projectRoot
 $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
