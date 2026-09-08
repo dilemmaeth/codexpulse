@@ -27,6 +27,19 @@ function git(args, { allowFailure = false } = {}) {
   return result;
 }
 
+function dispatchPages(repository) {
+  const result = spawnSync('gh', ['workflow', 'run', 'pages.yml', '--repo', repository, '--ref', 'main'], {
+    cwd: PROJECT_ROOT,
+    encoding: 'utf8',
+    windowsHide: true,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  });
+  if (result.status !== 0) {
+    const detail = String(result.stderr || result.stdout || '').trim().split(/\r?\n/u).at(-1);
+    throw new Error(`A GitHub Pages indítása sikertelen${detail ? `: ${detail}` : ''}`);
+  }
+}
+
 function validateRepositoryUrl(value) {
   let url;
   try { url = new URL(value); } catch { throw new Error('A repositoryUrl nem érvényes URL.'); }
@@ -35,13 +48,13 @@ function validateRepositoryUrl(value) {
   }
   url.hash = '';
   url.search = '';
-  return url.href;
+  return { url: url.href, repository: url.pathname.replace(/^\//u, '').replace(/\.git$/u, '') };
 }
 
 async function main() {
   if (!existsSync(CONFIG_FILE) || !existsSync(DATA_FILE)) throw new Error('Hiányzik a CodexPulse konfiguráció vagy a titkosított snapshot.');
   const config = JSON.parse(await readFile(CONFIG_FILE, 'utf8'));
-  const repositoryUrl = validateRepositoryUrl(config.repositoryUrl || '');
+  const { url: repositoryUrl, repository } = validateRepositoryUrl(config.repositoryUrl || '');
   await mkdir(PUBLISH_ROOT, { recursive: true });
 
   if (!existsSync(join(PUBLISH_ROOT, '.git'))) {
@@ -68,6 +81,7 @@ async function main() {
   }
   git(['commit', '--quiet', '-m', 'Update encrypted usage snapshot']);
   git(['push', '--quiet', 'origin', 'HEAD:data']);
+  dispatchPages(repository);
   process.stdout.write(`${JSON.stringify({ status: 'published', branch: 'data' })}\n`);
 }
 
