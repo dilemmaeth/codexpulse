@@ -29,9 +29,10 @@ if ($LASTEXITCODE -ne 0) { throw 'A kezdeti CodexPulse publikálás sikertelen.'
 
 $action = New-ScheduledTaskAction -Execute $nodePath -Argument ('"{0}"' -f $runScript) -WorkingDirectory $projectRoot
 $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-$dailyTrigger = New-ScheduledTaskTrigger -Daily -At '00:00'
-$dailyTrigger.Repetition.Interval = "PT${IntervalHours}H"
-$dailyTrigger.Repetition.Duration = 'P1D'
+$periodicTriggers = for ($hour = 0; $hour -lt 24; $hour += $IntervalHours) {
+  New-ScheduledTaskTrigger -Daily -At ('{0:D2}:00' -f $hour)
+}
+$triggers = @($logonTrigger) + @($periodicTriggers)
 $settings = New-ScheduledTaskSettingsSet `
   -StartWhenAvailable `
   -RunOnlyIfIdle `
@@ -41,6 +42,6 @@ $settings = New-ScheduledTaskSettingsSet `
   -MultipleInstances IgnoreNew
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($logonTrigger, $dailyTrigger) -Settings $settings -Principal $principal -Description 'CodexPulse: titkosított Codex-statisztika frissítése bejelentkezéskor és üresjáratban.' -Force | Out-Null
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Settings $settings -Principal $principal -Description 'CodexPulse: titkosított Codex-statisztika frissítése bejelentkezéskor és üresjáratban.' -Force | Out-Null
 Write-Output "CodexPulse ütemezés elkészült: $taskName"
 Write-Output "Párosító: $(Join-Path $projectRoot '.codexpulse\private\pair.html')"
