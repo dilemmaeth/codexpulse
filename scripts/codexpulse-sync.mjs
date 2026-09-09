@@ -501,6 +501,7 @@ function buildMonths(tasks, usageCache, incrementalLedger) {
       const month = ensureMonth(String(day.date).slice(0, 7));
       const daily = {
         date: day.date,
+        models: Object.keys(day.models || {}).sort((a, b) => a.localeCompare(b)),
         inputTokens: Number(day.inputTokens || 0),
         cacheReadTokens: Number(day.cacheReadTokens || 0),
         cacheWriteTokens: Number(day.cacheCreationTokens || 0),
@@ -561,6 +562,10 @@ function buildMonths(tasks, usageCache, incrementalLedger) {
       addUsage(month.days.get(date), estimate);
       addUsage(month.usage, estimate);
       month.days.get(date).estimated = true;
+      month.days.get(date).models = [...new Set([
+        ...(month.days.get(date).models || []),
+        ...Object.keys(entry.models || {}),
+      ])].sort((a, b) => a.localeCompare(b));
       month.estimated = true;
       month.estimateReasons.push('incremental-allocation');
       for (const [model, tokens] of Object.entries(entry.models || {})) {

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, BarChart3, CalendarDays, FileText, FolderKanban, RefreshCw, Sparkles } from 'lucide-react';
 
 import { ErrorGate, LockedGate, PinSetupGate, RecoveryGate, UnpairedGate } from '@/components/codexpulse/security-gates';
-import { ActivityScreen, AnalysisScreen, MonthScreen, ProjectsScreen, ReportScreen } from '@/components/codexpulse/screens';
+import { AnalysisScreen, MonthScreen, ProjectsScreen, ReportScreen } from '@/components/codexpulse/screens';
+import { ActivityScreen } from '@/components/codexpulse/activity-screen';
 import { SettingsDialog } from '@/components/codexpulse/settings-dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -128,7 +129,7 @@ export default function Home() {
           {app.demo && <aside className="demo-banner"><Sparkles />{t(app.language, 'demoBanner')}</aside>}
           <TabsContent value="month" className="screen-content"><MonthScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} rateLimits={app.snapshot.rateLimits} /></TabsContent>
           <TabsContent value="projects" className="screen-content"><ProjectsScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} /></TabsContent>
-          <TabsContent value="activity" className="screen-content"><ActivityScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} vault={app.vault} onVault={app.updateVault} /></TabsContent>
+          <TabsContent value="activity" className="screen-content"><ActivityScreen key={activeMonth} language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} vault={app.vault} onVault={app.updateVault} /></TabsContent>
           <TabsContent value="analysis" className="screen-content"><AnalysisScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} /></TabsContent>
           <TabsContent value="report" className="screen-content"><ReportScreen language={app.language} view={view} vault={app.vault} onVault={app.updateVault} /></TabsContent>
           <TabsList className="bottom-navigation" aria-label={app.language === 'hu' ? 'Fő navigáció' : 'Main navigation'}>

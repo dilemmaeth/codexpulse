@@ -1,7 +1,7 @@
 import type { CodexPulseSnapshot, TaskRecord, TokenUsage } from './types';
 
 const emptyParts = (totalTokens: number, costUSD: number): TokenUsage => ({
-  inputTokens: Math.round(totalTokens * 0.22),
+  inputTokens: Math.round(totalTokens * 0.245),
   cacheReadTokens: Math.round(totalTokens * 0.69),
   cacheWriteTokens: Math.round(totalTokens * 0.025),
   outputTokens: Math.round(totalTokens * 0.04),
@@ -58,6 +58,7 @@ function days(month: string, totals: number[], estimated: boolean) {
   return totals.map((totalTokens, index) => ({
     ...emptyParts(totalTokens, totalTokens / 9_000_000),
     date: `${month}-${String(index + 1).padStart(2, '0')}`,
+    models: ['gpt-5.6-sol', 'gpt-6-astra'],
     turns: Math.max(1, Math.round(totalTokens / 8_000_000)),
     activeTasks: Math.max(1, Math.round(totalTokens / 24_000_000)),
     estimated,

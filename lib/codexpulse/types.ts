@@ -22,6 +22,7 @@ export type TokenUsage = {
 
 export type DailyUsage = TokenUsage & {
   date: string;
+  models?: string[];
   turns: number;
   activeTasks: number;
   estimated: boolean;

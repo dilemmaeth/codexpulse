@@ -3,7 +3,6 @@
 import { useState, type CSSProperties } from 'react';
 import {
   CheckCircle2,
-  Clock3,
   Download,
   FileText,
   FolderKanban,
@@ -19,16 +18,11 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import {
-  CATEGORY_ORDER,
-  effectiveCategory,
-  effectiveOutcome,
-  projectName,
   type MonthView,
 } from '@/lib/codexpulse/analytics';
 import { categoryLabel, outcomeLabel, t } from '@/lib/codexpulse/i18n';
 import { exportReport } from '@/lib/codexpulse/report';
 import type {
-  CategoryId,
   CodexPulseSnapshot,
   Language,
   LocalVault,
@@ -72,7 +66,7 @@ function Metric({ label, value, detail, accent }: {
   );
 }
 
-function MonthHeading({ language, selectedMonth, months, onMonth }: {
+export function MonthHeading({ language, selectedMonth, months, onMonth }: {
   language: Language;
   selectedMonth: string;
   months: string[];
@@ -208,58 +202,6 @@ export function ProjectsScreen({ language, view, months, selectedMonth, onMonth 
   );
 }
 
-export function ActivityScreen({ language, view, months, selectedMonth, onMonth, vault, onVault }: {
-  language: Language;
-  view: MonthView;
-  months: string[];
-  selectedMonth: string;
-  onMonth: (month: string) => void;
-  vault: LocalVault;
-  onVault: (updater: (current: LocalVault) => LocalVault) => void;
-}) {
-  const firstWeekday = new Date(`${selectedMonth}-01T12:00:00Z`).getUTCDay();
-  const max = Math.max(...view.month.days.map((day) => day.totalTokens), 1);
-  const dayMap = new Map(view.month.days.map((day) => [Number(day.date.slice(8, 10)), day]));
-  const daysInMonth = new Date(Number(selectedMonth.slice(0, 4)), Number(selectedMonth.slice(5, 7)), 0).getDate();
-  return (
-    <div className="screen-stack">
-      <MonthHeading language={language} selectedMonth={selectedMonth} months={months} onMonth={onMonth} />
-      <section className="panel heatmap-panel">
-        <div className="panel-heading"><div><p className="eyebrow">{t(language, 'taskActivity')}</p><h2>{t(language, 'activityRhythm')}</h2></div><span className="panel-meta">{view.totalTurns} {t(language, 'turns').toLowerCase()}</span></div>
-        <div className="weekday-row">{(language === 'hu' ? ['V','H','K','Sze','Cs','P','Szo'] : ['S','M','T','W','T','F','S']).map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div>
-        <div className="month-heatmap">
-          {Array.from({ length: firstWeekday }, (_, index) => <i key={`blank-${index}`} />)}
-          {Array.from({ length: daysInMonth }, (_, index) => {
-            const day = dayMap.get(index + 1);
-            const strength = day ? Math.ceil(day.totalTokens / max * 4) : 0;
-            return <span key={index} data-strength={strength} title={day ? `${day.date}: ${integer(day.totalTokens, language)}` : String(index + 1)}>{index + 1}</span>;
-          })}
-        </div>
-        <div className="activity-summary"><div><Clock3 /><span>{t(language, 'activityNotHours')}</span></div><strong>{Math.round(view.activityMs / 60_000)} min</strong></div>
-      </section>
-      <section className="panel">
-        <div className="panel-heading"><div><p className="eyebrow">{t(language, 'recentTasks')}</p><h2>{view.tasks.length} {t(language, 'tasks').toLowerCase()}</h2></div></div>
-        <div className="task-list">
-          {view.tasks.slice(0, 20).map((task) => (
-            <article className="task-row" key={task.id}>
-              <div className="task-main"><strong>{task.title}</strong><span>{projectName(task, vault, view.tasks)} · {compact(task.months[selectedMonth].tokens, language)} token</span></div>
-              <div className="task-controls">
-                <Select value={effectiveCategory(task, vault)} onValueChange={(value) => onVault((current) => ({ ...current, categoryOverrides: { ...current.categoryOverrides, [task.id]: value as CategoryId } }))}>
-                  <SelectTrigger className="task-select" aria-label={t(language, 'category')}><SelectValue /></SelectTrigger>
-                  <SelectContent>{CATEGORY_ORDER.map((category) => <SelectItem key={category} value={category}>{categoryLabel(language, category)}</SelectItem>)}</SelectContent>
-                </Select>
-                <Select value={effectiveOutcome(task, vault)} onValueChange={(value) => onVault((current) => ({ ...current, outcomeOverrides: { ...current.outcomeOverrides, [task.id]: value as OutcomeId } }))}>
-                  <SelectTrigger className="task-select outcome-select" aria-label={t(language, 'outcome')}><SelectValue /></SelectTrigger>
-                  <SelectContent>{(['success','partial','failed','open'] as OutcomeId[]).map((outcome) => <SelectItem key={outcome} value={outcome}>{outcomeLabel(language, outcome)}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
 
 export function AnalysisScreen({ language, view, months, selectedMonth, onMonth }: {
   language: Language;
