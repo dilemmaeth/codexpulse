@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MonthHeading } from './screens';
-import { CATEGORY_ORDER, effectiveCategory, effectiveOutcome, projectName, type MonthView } from '@/lib/codexpulse/analytics';
+import { CATEGORY_ORDER, effectiveCategory, effectiveOutcome, filterActivityTasks, projectName, projectTarget, type MonthView } from '@/lib/codexpulse/analytics';
 import { categoryLabel, outcomeLabel, t } from '@/lib/codexpulse/i18n';
 import type { CategoryId, Language, LocalVault, OutcomeId, TokenUsage } from '@/lib/codexpulse/types';
 
@@ -26,6 +27,9 @@ export function ActivityScreen({ language, view, months, selectedMonth, onMonth,
 }) {
   const [daysExpanded, setDaysExpanded] = useState(false);
   const [taskLimit, setTaskLimit] = useState(8);
+  const [query, setQuery] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const hu = language === 'hu';
   const locale = hu ? 'hu-HU' : 'en-US';
   const number = (value: number) => new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(value);
@@ -33,6 +37,10 @@ export function ActivityScreen({ language, view, months, selectedMonth, onMonth,
   const days = [...view.month.days].sort((a, b) => b.date.localeCompare(a.date));
   const activeDays = days.filter((day) => day.totalTokens > 0).length;
   const maxTokens = Math.max(1, ...days.map((day) => day.totalTokens));
+  const projects = [...new Map(view.tasks.map((task) => [projectTarget(task.projectId, vault), projectName(task, vault, view.tasks)])).entries()].sort((a, b) => a[1].localeCompare(b[1], locale));
+  const filteredTasks = filterActivityTasks(view.tasks, vault, { query, project: projectFilter, category: categoryFilter });
+  const hasFilters = Boolean(query || projectFilter || categoryFilter);
+  const clearFilters = () => { setQuery(''); setProjectFilter(''); setCategoryFilter(''); setTaskLimit(8); };
   return <div className="screen-stack activity-screen">
     <MonthHeading language={language} selectedMonth={selectedMonth} months={months} onMonth={onMonth} />
     <section className="panel activity-overview" aria-label={hu ? 'Havi tokenösszesítő' : 'Monthly token summary'}>
@@ -62,8 +70,15 @@ export function ActivityScreen({ language, view, months, selectedMonth, onMonth,
     </section>
     <section className="panel compact-tasks" aria-labelledby="activity-tasks-heading">
       <div className="panel-heading"><h2 id="activity-tasks-heading">{t(language, 'recentTasks')}</h2><span className="activity-subtle">{view.tasks.length}</span></div>
+      <search className="activity-filters" aria-label={hu ? 'Feladatok keresése és szűrése' : 'Search and filter tasks'}>
+        <label className="activity-search"><span>{hu ? 'Keresés a feladatokban' : 'Search tasks'}</span><Input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setTaskLimit(8); }} placeholder={hu ? 'Feladat vagy projekt neve…' : 'Task or project name…'} /></label>
+        <label><span>{t(language, 'projects')}</span><Select value={projectFilter} onValueChange={(value) => { setProjectFilter(String(value)); setTaskLimit(8); }}><SelectTrigger className="activity-filter-select" aria-label={hu ? 'Projekt szűrése' : 'Filter by project'}><SelectValue>{projects.find(([id]) => id === projectFilter)?.[1] || (hu ? 'Minden projekt' : 'All projects')}</SelectValue></SelectTrigger><SelectContent className="activity-filter-options"><SelectItem value="">{hu ? 'Minden projekt' : 'All projects'}</SelectItem>{projects.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}</SelectContent></Select></label>
+        <label><span>{t(language, 'category')}</span><Select value={categoryFilter} onValueChange={(value) => { setCategoryFilter(String(value)); setTaskLimit(8); }}><SelectTrigger className="activity-filter-select" aria-label={hu ? 'Kategória szűrése' : 'Filter by category'}><SelectValue>{categoryFilter ? categoryLabel(language, categoryFilter as CategoryId) : (hu ? 'Minden kategória' : 'All categories')}</SelectValue></SelectTrigger><SelectContent className="activity-filter-options"><SelectItem value="">{hu ? 'Minden kategória' : 'All categories'}</SelectItem>{CATEGORY_ORDER.map((category) => <SelectItem key={category} value={category}>{categoryLabel(language, category)}</SelectItem>)}</SelectContent></Select></label>
+        <div className="activity-filter-status"><output>{hu ? `${filteredTasks.length} találat / ${view.tasks.length} feladat` : `${filteredTasks.length} matches / ${view.tasks.length} tasks`}</output>{hasFilters && <Button variant="ghost" onClick={clearFilters}>{hu ? 'Szűrők törlése' : 'Clear filters'}</Button>}</div>
+      </search>
       <p className="activity-hint">{hu ? 'Feladatszintű becslések; nem a havi naplóösszeg felosztása. A korábbi havi értékek rögzítettek. Az eredmény javítása a kiválasztott hónapra vonatkozik.' : 'Task-level estimates, not a split of the monthly log total. Historical monthly values are frozen. Outcome corrections apply to the selected month.'}</p>
-      {view.tasks.slice(0, taskLimit).map((task) => <details key={task.id} className="compact-task">
+      {!filteredTasks.length && <p className="activity-hint">{hu ? (hasFilters ? 'Nincs ilyen feladat. Próbálj másik keresést vagy töröld a szűrőket.' : 'Ehhez a hónaphoz még nincs feladat.') : (hasFilters ? 'No matching tasks. Try another search or clear the filters.' : 'No tasks recorded for this month yet.')}</p>}
+      {filteredTasks.slice(0, taskLimit).map((task) => <details key={task.id} className="compact-task">
         <summary><div><strong>{task.title}</strong><span>{projectName(task, vault, view.tasks)} · {number(task.months[selectedMonth].tokens)} token</span><small>{categoryLabel(language, effectiveCategory(task, vault))} · {outcomeLabel(language, effectiveOutcome(task, vault))}</small></div><ChevronDown aria-hidden="true" /></summary>
         <div className="task-controls">
           <label><span>{t(language, 'category')}</span><Select value={effectiveCategory(task, vault)} onValueChange={(value) => onVault((current) => ({ ...current, categoryOverrides: { ...current.categoryOverrides, [task.id]: value as CategoryId } }))}>
@@ -74,7 +89,7 @@ export function ActivityScreen({ language, view, months, selectedMonth, onMonth,
           </Select></label>
         </div>
       </details>)}
-      {view.tasks.length > taskLimit && <Button variant="ghost" className="activity-more" onClick={() => setTaskLimit(taskLimit + 10)}>{hu ? 'További feladatok' : 'More tasks'} ({view.tasks.length - taskLimit})</Button>}
+      {filteredTasks.length > taskLimit && <Button variant="ghost" className="activity-more" onClick={() => setTaskLimit(taskLimit + 10)}>{hu ? 'További feladatok' : 'More tasks'} ({filteredTasks.length - taskLimit})</Button>}
     </section>
   </div>;
 }

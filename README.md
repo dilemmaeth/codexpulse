@@ -5,6 +5,9 @@ CodexPulse is a private, installable iPhone dashboard for reviewing local Codex 
 ## What v1 includes
 
 - Monthly token totals, active days, tasks and personal usage/results indices
+- Touch-friendly month selection on every main view, including reports
+- Accent-insensitive task search with combined project/category filters and a clear/reset action
+- Local Hungarian/English monthly summaries of focus, estimated project usage and period-matched changes (no AI service or API calls)
 - Project, category, daily activity, model and outcome breakdowns
 - Five editable categories: Development, Research, Planning, Testing and Documentation
 - Local task category/outcome corrections and project rename/hide/merge rules

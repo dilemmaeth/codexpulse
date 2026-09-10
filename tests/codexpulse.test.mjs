@@ -24,6 +24,44 @@ test('failed outcomes contribute zero; partial contributes half', () => {
   assert.equal(analytics.buildMonthView(snapshot, '2026-09', vault).resultsIndex, success / 2);
 });
 
+test('activity search combines accent-insensitive words, merged projects and corrected categories', () => {
+  const vault = empty();
+  const first = { ...DEMO_SNAPSHOT.tasks[0], id: 'a', title: 'Árvíztűrő tesztelés', projectId: 'old', projectName: 'Old', category: 'research' };
+  const second = { ...first, id: 'b', title: 'Másik feladat', projectId: 'new', projectName: 'Új projekt' };
+  vault.projectRules.old = { mergeInto: 'new' };
+  vault.categoryOverrides.a = 'testing';
+  const tasks = [first, second];
+  const select = (query = '', project = '', category = '') => analytics.filterActivityTasks(tasks, vault, { query, project, category });
+  assert.deepEqual(select('ARVIZTURO uj', 'new', 'testing').map(task => task.id), ['a']);
+  assert.equal(select('', 'old').length, 0);
+  assert.equal(select('', 'new').length, 2);
+  assert.equal(select('nemletezo').length, 0);
+  assert.equal(select('   ').length, 2);
+  assert.equal(select('', '', 'research')[0].id, 'b');
+});
+
+test('monthly highlights keep ties, omit hidden projects and handle empty months', () => {
+  const vault = empty();
+  let view = analytics.buildMonthView(DEMO_SNAPSHOT, '2026-09', vault);
+  const highlights = analytics.monthlyHighlights(view);
+  const max = Math.max(...view.categories.map(category => category.tasks));
+  assert.deepEqual(highlights.leadingCategories, view.categories.filter(category => category.tasks === max));
+  assert.equal(highlights.activeDays, view.month.days.filter(day => day.totalTokens > 0).length);
+  assert.equal(view.comparisonMonth, '2026-08');
+  assert.equal(view.comparisonThroughDay, 8);
+  assert.equal(view.comparisonEstimated, true);
+  const hidden = view.projects[0].id;
+  vault.projectRules[hidden] = { hidden: true };
+  view = analytics.buildMonthView(DEMO_SNAPSHOT, '2026-09', vault);
+  assert.notEqual(analytics.monthlyHighlights(view).leadingProject?.id, hidden);
+  const emptyView = { ...view, tasks: [], categories: [], projects: [], month: { ...view.month, days: [] } };
+  assert.deepEqual(analytics.monthlyHighlights(emptyView), { activeDays: 0, leadingCategories: [], leadingProject: null });
+  const july = analytics.buildMonthView(DEMO_SNAPSHOT, '2026-07', vault);
+  assert.equal(july.comparisonMonth, null);
+  assert.equal(july.previousMonthChange, null);
+  assert.equal(july.comparisonThroughDay, null);
+});
+
 test('closing an open task appears in selected month, including old vault migration', () => {
   const snapshot = structuredClone(DEMO_SNAPSHOT), vault = empty();
   const task = snapshot.tasks.find(t => t.outcome === 'open' && t.months['2026-09']);
@@ -112,13 +150,13 @@ test('service worker removes only previous app caches and precaches compiled ass
   const handlers = {}, deleted = []; let assets;
   const context = vm.createContext({ URL, fetch: async () => ({ ok: true, json: async () => ['assets/app.js', 'assets/app.css'] }),
     self: { registration: { scope: 'https://example.test/codexpulse/' }, clients: { claim: async () => {} }, addEventListener: (name, fn) => handlers[name] = fn },
-    caches: { keys: async () => ['codexpulse-shell-v1.1', 'codexpulse-shell-v1.2', 'codexpulse-shell-v1.2.1', 'nextrep-offline'], delete: async key => deleted.push(key), open: async () => ({ addAll: async value => assets = value }) } });
+    caches: { keys: async () => ['codexpulse-shell-v1.1', 'codexpulse-shell-v1.2', 'codexpulse-shell-v1.2.1', 'codexpulse-shell-v1.2.2', 'nextrep-offline'], delete: async key => deleted.push(key), open: async () => ({ addAll: async value => assets = value }) } });
   vm.runInContext(readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8'), context);
   let pending;
   handlers.install({ waitUntil: p => pending = p }); await pending;
   assert.ok(assets.includes('https://example.test/codexpulse/assets/app.js'));
   handlers.activate({ waitUntil: p => pending = p }); await pending;
-  assert.deepEqual(deleted, ['codexpulse-shell-v1.1', 'codexpulse-shell-v1.2']);
+  assert.deepEqual(deleted, ['codexpulse-shell-v1.1', 'codexpulse-shell-v1.2', 'codexpulse-shell-v1.2.1']);
 });
 
 test('unchanged source still retries a previously failed publication', async () => {

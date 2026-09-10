@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import {
+  monthlyHighlights,
   type MonthView,
 } from '@/lib/codexpulse/analytics';
 import { categoryLabel, outcomeLabel, t } from '@/lib/codexpulse/i18n';
@@ -78,12 +79,31 @@ export function MonthHeading({ language, selectedMonth, months, onMonth }: {
       <div><p className="eyebrow">{t(language, 'monthlyOverview')}</p><h1>{monthLabel(selectedMonth, language)}</h1></div>
       <Select value={selectedMonth} onValueChange={(value) => onMonth(String(value))}>
         <SelectTrigger className="month-picker" aria-label={t(language, 'month')}><SelectValue>{selectedMonth}</SelectValue></SelectTrigger>
-        <SelectContent>
+        <SelectContent className="month-options">
           {months.map((month) => <SelectItem value={month} key={month}>{monthLabel(month, language)}</SelectItem>)}
         </SelectContent>
       </Select>
     </section>
   );
+}
+
+function MonthlySummary({ language, view }: { language: Language; view: MonthView }) {
+  const hu = language === 'hu';
+  const highlights = monthlyHighlights(view);
+  const categories = highlights.leadingCategories;
+  const project = highlights.leadingProject;
+  const change = view.previousMonthChange;
+  const roundedChange = change === null ? null : Math.round(Math.abs(change));
+  return <section className="panel monthly-summary" aria-label={hu ? 'Hónap röviden' : 'Month in brief'}>
+    <h2>{hu ? 'Hónap röviden' : 'Month in brief'}</h2>
+    <p>{hu ? `${view.tasks.length} feladat, ${highlights.activeDays} aktív nap a rögzített adatokban.` : `${view.tasks.length} tasks and ${highlights.activeDays} active days in the recorded data.`}</p>
+    {categories.length > 0 && <p>{hu ? (categories.length > 1 ? 'Megosztott fókusz: ' : 'Fő fókusz: ') : (categories.length > 1 ? 'Shared focus: ' : 'Main focus: ')}<strong>{categories.map((category) => categoryLabel(language, category.id)).join(', ')}</strong>{hu ? ` — ${Math.round(categories[0].taskShare)}%${categories.length > 1 ? ' kategóriánként' : ''}, feladatszám alapján.` : ` — ${Math.round(categories[0].taskShare)}%${categories.length > 1 ? ' each' : ''}, by task count.`}</p>}
+    {project && <p>{hu ? 'A látható projektek közül a legtöbb becsült token: ' : 'Most estimated tokens among visible projects: '}<strong>{project.name}</strong>{hu ? ` (${Math.round(project.share)}% az összes feladat becsült tokenjeiből).` : ` (${Math.round(project.share)}% of all task-level estimated tokens).`}</p>}
+    <p>{change !== null && view.comparisonMonth
+      ? (hu ? `Tokenhasználat: ${roundedChange === 0 ? 'közel változatlan' : `${roundedChange}%-kal ${change > 0 ? 'több' : 'kevesebb'}`}. Viszonyítás: ${monthLabel(view.comparisonMonth, language)}${view.comparisonThroughDay ? `, mindkét hónap első ${view.comparisonThroughDay} napját nézve` : ''}.` : `Token usage: ${roundedChange === 0 ? 'approximately unchanged' : `${roundedChange}% ${change > 0 ? 'higher' : 'lower'}`} compared with ${monthLabel(view.comparisonMonth, language)}${view.comparisonThroughDay ? `, comparing the first ${view.comparisonThroughDay} days of each month` : ''}.`)
+      : (hu ? 'A változás kiszámításához nincs elegendő korábbi használati adat.' : 'Not enough prior usage data to calculate a change.')}</p>
+    <small>{hu ? 'Helyben készül, a mentett statisztikákból. A projektadatok becslések.' : 'Generated locally from saved statistics. Project figures are estimates.'} {view.month.estimated && (hu ? 'Ez a hónap becsült adatokat is tartalmaz.' : 'This month also contains estimated data.')} {change !== null && view.comparisonEstimated && (hu ? 'Az összehasonlítás is tartalmaz becslést.' : 'The comparison also includes estimates.')} {view.comparisonThroughDay && (hu ? `Részleges hónap, rögzítve: ${view.generatedDate}.` : `Partial month, captured: ${view.generatedDate}.`)}</small>
+  </section>;
 }
 
 export function MonthScreen({ language, view, months, selectedMonth, onMonth, rateLimits }: {
@@ -128,6 +148,7 @@ export function MonthScreen({ language, view, months, selectedMonth, onMonth, ra
         <Metric label={t(language, 'tasks')} value={integer(view.tasks.length, language)} detail={`${view.projects.length} ${t(language, 'projectsCount')}`} />
         <Metric label={t(language, 'activeDays')} value={integer(view.month.days.filter((day) => day.totalTokens > 0).length, language)} detail={`${view.totalTurns} ${t(language, 'turns').toLowerCase()}`} />
       </section>
+      <MonthlySummary language={language} view={view} />
       <section className="panel category-panel">
         <div className="panel-heading">
           <div><p className="eyebrow">{t(language, 'focus')}</p><h2>{t(language, 'focusQuestion')}</h2></div>
@@ -253,11 +274,14 @@ export function AnalysisScreen({ language, view, months, selectedMonth, onMonth 
   );
 }
 
-export function ReportScreen({ language, view, vault, onVault }: {
+export function ReportScreen({ language, view, vault, onVault, months, selectedMonth, onMonth }: {
   language: Language;
   view: MonthView;
   vault: LocalVault;
   onVault: (updater: (current: LocalVault) => LocalVault) => void;
+  months: string[];
+  selectedMonth: string;
+  onMonth: (month: string) => void;
 }) {
   const [reportLanguage, setReportLanguage] = useState<Language>(language);
   const [status, setStatus] = useState('');
@@ -280,6 +304,7 @@ export function ReportScreen({ language, view, vault, onVault }: {
   return (
     <div className="screen-stack report-screen">
       <section className="screen-title"><div className="title-icon"><FileText /></div><div><p className="eyebrow">CodexPulse</p><h1>{t(language, 'shareableReport')}</h1></div></section>
+      <MonthHeading language={language} selectedMonth={selectedMonth} months={months} onMonth={(month) => { setStatus(''); onMonth(month); }} />
       <p className="report-privacy"><Info />{t(language, 'privateDetailsExcluded')}</p>
       <section className="report-preview">
         <div className="report-preview-head"><span>CODEXPULSE</span>{view.month.estimated && <EstimateBadge language={reportLanguage} />}</div>

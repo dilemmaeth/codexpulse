@@ -136,7 +136,7 @@ export default function Home() {
           <TabsContent value="projects" className="screen-content"><ProjectsScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} /></TabsContent>
           <TabsContent value="activity" className="screen-content"><ActivityScreen key={activeMonth} language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} vault={app.vault} onVault={app.updateVault} /></TabsContent>
           <TabsContent value="analysis" className="screen-content"><AnalysisScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} /></TabsContent>
-          <TabsContent value="report" className="screen-content"><ReportScreen language={app.language} view={view} vault={app.vault} onVault={app.updateVault} /></TabsContent>
+          <TabsContent value="report" className="screen-content"><ReportScreen language={app.language} view={view} vault={app.vault} onVault={app.updateVault} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} /></TabsContent>
           <TabsList className="bottom-navigation" aria-label={app.language === 'hu' ? 'Fő navigáció' : 'Main navigation'}>
             {navigation.map((item) => <TabsTrigger value={item.value} key={item.value} className="nav-item"><item.icon /><span>{t(app.language, item.key)}</span></TabsTrigger>)}
           </TabsList>

@@ -33,6 +33,9 @@ export type MonthView = {
   usageIndex: number | null;
   resultsIndex: number | null;
   previousMonthChange: number | null;
+  comparisonMonth: string | null;
+  comparisonThroughDay: number | null;
+  comparisonEstimated: boolean;
   totalTurns: number;
   activityMs: number;
 };
@@ -166,6 +169,9 @@ export function buildMonthView(
     usageIndex: usageAverage ? (currentUsage / usageAverage) * 100 : null,
     resultsIndex: resultAverage ? (currentResults / resultAverage) * 100 : null,
     previousMonthChange: previousUsage ? ((currentUsage - previousUsage) / previousUsage) * 100 : null,
+    comparisonMonth: previousMonth?.id || null,
+    comparisonThroughDay: throughDay || null,
+    comparisonEstimated: Boolean(month.estimated || previousMonth?.estimated),
     totalTurns: tasks.reduce((sum, item) => sum + item.months[monthId].turns, 0),
     activityMs: tasks.reduce((sum, item) => sum + item.months[monthId].activityMs, 0),
   };
@@ -181,4 +187,27 @@ export function effectiveCategory(task: TaskRecord, vault: LocalVault) {
 
 export function effectiveOutcome(task: TaskRecord, vault: LocalVault) {
   return taskOutcome(task, vault);
+}
+
+const searchText = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+export function filterActivityTasks(tasks: TaskRecord[], vault: LocalVault, filters: {
+  query: string; project: string; category: string;
+}) {
+  const words = searchText(filters.query).trim().split(/\s+/).filter(Boolean);
+  return tasks.filter((task) => {
+    if (filters.project && projectTarget(task.projectId, vault) !== filters.project) return false;
+    if (filters.category && effectiveCategory(task, vault) !== filters.category) return false;
+    const haystack = searchText(`${task.title} ${projectName(task, vault, tasks)}`);
+    return words.every((word) => haystack.includes(word));
+  });
+}
+
+export function monthlyHighlights(view: MonthView) {
+  const maxTasks = Math.max(0, ...view.categories.map((category) => category.tasks));
+  return {
+    activeDays: view.month.days.filter((day) => day.totalTokens > 0).length,
+    leadingCategories: view.categories.filter((category) => maxTasks > 0 && category.tasks === maxTasks),
+    leadingProject: view.projects.find((project) => project.tokens > 0) || null,
+  };
 }
