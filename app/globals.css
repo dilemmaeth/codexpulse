@@ -56,10 +56,10 @@
 }
 
 * { box-sizing: border-box; border-color: var(--border); }
-html { min-width: 320px; color-scheme: dark; background: var(--background); }
+html { min-width: 0; color-scheme: dark; background: var(--background); }
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   min-height: 100dvh;
   overflow-x: hidden;
   background:

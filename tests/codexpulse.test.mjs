@@ -112,13 +112,13 @@ test('service worker removes only previous app caches and precaches compiled ass
   const handlers = {}, deleted = []; let assets;
   const context = vm.createContext({ URL, fetch: async () => ({ ok: true, json: async () => ['assets/app.js', 'assets/app.css'] }),
     self: { registration: { scope: 'https://example.test/codexpulse/' }, clients: { claim: async () => {} }, addEventListener: (name, fn) => handlers[name] = fn },
-    caches: { keys: async () => ['codexpulse-shell-v1.1', 'codexpulse-shell-v1.2', 'nextrep-offline'], delete: async key => deleted.push(key), open: async () => ({ addAll: async value => assets = value }) } });
+    caches: { keys: async () => ['codexpulse-shell-v1.1', 'codexpulse-shell-v1.2', 'codexpulse-shell-v1.2.1', 'nextrep-offline'], delete: async key => deleted.push(key), open: async () => ({ addAll: async value => assets = value }) } });
   vm.runInContext(readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8'), context);
   let pending;
   handlers.install({ waitUntil: p => pending = p }); await pending;
   assert.ok(assets.includes('https://example.test/codexpulse/assets/app.js'));
   handlers.activate({ waitUntil: p => pending = p }); await pending;
-  assert.deepEqual(deleted, ['codexpulse-shell-v1.1']);
+  assert.deepEqual(deleted, ['codexpulse-shell-v1.1', 'codexpulse-shell-v1.2']);
 });
 
 test('unchanged source still retries a previously failed publication', async () => {
