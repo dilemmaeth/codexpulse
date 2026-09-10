@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
+import { useClock } from '@/lib/codexpulse/use-clock';
 import {
   CheckCircle2,
   Download,
@@ -76,7 +77,7 @@ export function MonthHeading({ language, selectedMonth, months, onMonth }: {
     <section className="month-heading">
       <div><p className="eyebrow">{t(language, 'monthlyOverview')}</p><h1>{monthLabel(selectedMonth, language)}</h1></div>
       <Select value={selectedMonth} onValueChange={(value) => onMonth(String(value))}>
-        <SelectTrigger className="month-picker" aria-label={t(language, 'month')}><SelectValue /></SelectTrigger>
+        <SelectTrigger className="month-picker" aria-label={t(language, 'month')}><SelectValue>{selectedMonth}</SelectValue></SelectTrigger>
         <SelectContent>
           {months.map((month) => <SelectItem value={month} key={month}>{monthLabel(month, language)}</SelectItem>)}
         </SelectContent>
@@ -94,12 +95,13 @@ export function MonthScreen({ language, view, months, selectedMonth, onMonth, ra
   rateLimits: CodexPulseSnapshot['rateLimits'];
 }) {
   const [shareMode, setShareMode] = useState<'tasks' | 'tokens'>('tasks');
+  const now = useClock();
   const change = view.previousMonthChange;
   return (
     <div className="screen-stack">
       <MonthHeading language={language} selectedMonth={selectedMonth} months={months} onMonth={onMonth} />
       {view.month.estimated && (
-        <div className="quality-note"><EstimateBadge language={language} /><span>{language === 'hu' ? 'A korábbi hónap feladatelosztása aktivitás alapján közelített.' : 'Earlier task allocation is approximated from recorded activity.'}</span></div>
+        <div className="quality-note"><EstimateBadge language={language} /><span>{language === 'hu' ? 'Becsült történeti adatok vagy API-költség. A feladatok tokeneloszlása külön becslés, nem a havi naplóösszeg felosztása.' : 'Includes historical estimates or estimated API costs. Task token allocation is a separate estimate, not a split of the monthly log total.'}</span></div>
       )}
       <section className="hero-card" aria-labelledby="usage-index-title">
         <div className="hero-copy">
@@ -147,23 +149,24 @@ export function MonthScreen({ language, view, months, selectedMonth, onMonth, ra
         </div>
       </section>
       <section className="panel pulse-panel">
-        <div className="panel-heading"><div><p className="eyebrow">{t(language, 'activityRhythm')}</p><h2>{t(language, 'dailyUsage')}</h2></div><span className="panel-meta accent-text">{t(language, 'stable')}</span></div>
+        <div className="panel-heading"><div><p className="eyebrow">{t(language, 'activityRhythm')}</p><h2>{t(language, 'dailyUsage')}</h2></div><span className="panel-meta">Europe/Budapest</span></div>
         <div className="sparkline" aria-label={t(language, 'dailyUsage')}>
           {view.month.days.map((day) => {
             const max = Math.max(...view.month.days.map((item) => item.totalTokens), 1);
             return <span key={day.date} style={{ height: `${Math.max(5, day.totalTokens / max * 100)}%` }} title={`${day.date}: ${integer(day.totalTokens, language)}`}><i /></span>;
           })}
         </div>
-        <div className="sparkline-labels"><span>{view.month.days[0]?.date.slice(5) || selectedMonth}</span><span>{t(language, 'today')}</span></div>
+        <div className="sparkline-labels"><span>{view.month.days[0]?.date.slice(5) || selectedMonth}</span><span>{view.month.days.at(-1)?.date.slice(5) || selectedMonth}</span></div>
       </section>
       {rateLimits?.windows.length ? (
         <section className="panel limit-panel">
           <div className="panel-heading"><div><p className="eyebrow">Usage</p><h2>{t(language, 'usageWindows')}</h2></div><span className="panel-meta">{rateLimits.planType || 'Codex'}</span></div>
           <div className="limit-list">
+            <p className="activity-hint">{language === 'hu' ? 'Nem élő kvóta. Rögzítve: ' : 'Not a live quota. Captured: '}{new Intl.DateTimeFormat(dateLocale(language), { dateStyle: 'short', timeStyle: 'short' }).format(new Date(rateLimits.capturedAt))}</p>
             {rateLimits.windows.map((window) => (
               <div className="limit-row" key={window.id}>
-                <div><span>{window.windowMinutes < 1_440 ? `${Math.round(window.windowMinutes / 60)}h` : `${Math.round(window.windowMinutes / 1_440)}d`}</span><strong>{window.usedPercent.toFixed(0)}%</strong></div>
-                <div className="limit-track"><span style={{ width: `${Math.min(100, window.usedPercent)}%` }} /></div>
+                <div><span>{window.windowMinutes < 1_440 ? `${Math.round(window.windowMinutes / 60)}h` : `${Math.round(window.windowMinutes / 1_440)}d`}</span><strong>{Date.parse(window.resetsAt) <= now ? (language === 'hu' ? 'Lejárt adat' : 'Expired data') : `${window.usedPercent.toFixed(0)}%`}</strong></div>
+                <div className="limit-track"><span style={{ width: `${Date.parse(window.resetsAt) <= now ? 0 : Math.min(100, Math.max(0, window.usedPercent))}%` }} /></div>
                 <small>{t(language, 'resets')}: {new Intl.DateTimeFormat(dateLocale(language), { dateStyle: 'short', timeStyle: 'short' }).format(new Date(window.resetsAt))}</small>
               </div>
             ))}
@@ -185,6 +188,7 @@ export function ProjectsScreen({ language, view, months, selectedMonth, onMonth 
     <div className="screen-stack">
       <MonthHeading language={language} selectedMonth={selectedMonth} months={months} onMonth={onMonth} />
       <section className="screen-title"><div className="title-icon"><FolderKanban /></div><div><p className="eyebrow">{t(language, 'projectOverview')}</p><h2>{t(language, 'projectShare')}</h2></div></section>
+      <p className="activity-hint">{language === 'hu' ? 'A százalékok a feladatszintű becslésekből készülnek, nem a havi naplóösszegből.' : 'Percentages use task-level estimates, not the monthly log total.'}</p>
       <div className="project-card-list">
         {view.projects.map((project, index) => (
           <article className="project-card" key={project.id}>
@@ -216,7 +220,7 @@ export function AnalysisScreen({ language, view, months, selectedMonth, onMonth 
     { label: 'Cache read', value: usage.cacheReadTokens, color: 'violet' },
     { label: 'Cache write', value: usage.cacheWriteTokens, color: 'blue' },
     { label: 'Output', value: usage.outputTokens, color: 'amber' },
-    { label: 'Reasoning', value: usage.reasoningTokens, color: 'mint' },
+    { label: 'Reasoning ⊂ Output', value: usage.reasoningTokens, color: 'mint' },
   ];
   return (
     <div className="screen-stack">
@@ -238,6 +242,7 @@ export function AnalysisScreen({ language, view, months, selectedMonth, onMonth 
       </section>
       <section className="panel">
         <div className="panel-heading"><div><p className="eyebrow">{t(language, 'outcomes')}</p><h2>{t(language, 'resultsIndex')}</h2></div></div>
+        <p className="activity-hint">{language === 'hu' ? 'Sikeres = 1 pont, részben sikeres = 0,5, sikertelen vagy nyitott = 0. Az index az előző hónapok azonos időszakának átlagához viszonyít. Az automatikus besorolás becslés, az Aktivitás lapon javítható.' : 'Success = 1 point, partial = 0.5, failed or open = 0. The index compares with the same period in previous months. Automatic outcomes are estimates; correct them in Activity.'}</p>
         <div className="outcome-grid">{(['success','partial','failed','open'] as OutcomeId[]).map((outcome) => <div className={`outcome-card outcome-${outcome}`} key={outcome}><strong>{view.outcomes[outcome]}</strong><span>{outcomeLabel(language, outcome)}</span></div>)}</div>
       </section>
       <section className="panel">
@@ -262,7 +267,7 @@ export function ReportScreen({ language, view, vault, onVault }: {
       await exportReport({
         language: reportLanguage,
         monthLabel: monthLabel(view.month.id, reportLanguage),
-        generatedLabel: `${t(reportLanguage, 'lastSync')}: ${new Intl.DateTimeFormat(dateLocale(reportLanguage), { dateStyle: 'medium' }).format(new Date(view.month.days.at(-1)?.date || `${view.month.id}-01`))}`,
+        generatedLabel: `${t(reportLanguage, 'lastSync')}: ${new Intl.DateTimeFormat(dateLocale(reportLanguage), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(view.generatedAt))}`,
         view,
         includeProjects: vault.reportIncludesProjects,
       }, format);

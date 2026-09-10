@@ -88,7 +88,19 @@ async function main() {
   }
 
   let incrementalDays = 0;
-  if (existsSync(USAGE_CACHE) && config.incrementalUsage?.version === 1) {
+  if (config.eventUsage?.version === 2) {
+    const ledger = config.eventUsage;
+    const cacheTotal = ledger.baseCache.daily.reduce((sum, day) => sum + Number(day.totalTokens || 0), 0);
+    const eventTotal = Object.values(ledger.days).reduce((sum, day) => sum + day.totalTokens, 0);
+    const actual = snapshot.months.reduce((sum, month) => sum + month.usage.totalTokens, 0);
+    assert(Math.abs(actual - cacheTotal - eventTotal) < 2, 'A rögzített alap és eseménynapló összege eltér.');
+    for (const month of snapshot.months) {
+      assert(Math.abs(month.usage.totalTokens - month.days.reduce((sum, day) => sum + day.totalTokens, 0)) < 2, 'A napi és havi összeg eltér.');
+      assert(Math.abs(month.usage.totalTokens - month.models.reduce((sum, model) => sum + model.tokens, 0)) < 2, 'A modell- és havi összeg eltér.');
+    }
+    incrementalDays = Object.keys(ledger.days).length;
+  }
+  if (!config.eventUsage && existsSync(USAGE_CACHE) && config.incrementalUsage?.version === 1) {
     const usageCache = JSON.parse(await readFile(USAGE_CACHE, 'utf8'));
     const cacheTotal = usageCache.daily.reduce((sum, day) => sum + Number(day.totalTokens || 0), 0);
     const ledgerEntries = Object.values(config.incrementalUsage.days || {});

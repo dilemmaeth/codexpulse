@@ -34,6 +34,7 @@ import type {
   ProtectedKeyBundle,
 } from '@/lib/codexpulse/types';
 import { EMPTY_VAULT } from '@/lib/codexpulse/types';
+import { saveBackupFile, validateVault } from '@/lib/codexpulse/vault';
 
 type Phase = 'booting' | 'unpaired' | 'pairing' | 'recovery' | 'locked' | 'ready' | 'error';
 type FailedUnlocks = { count: number; lockUntil: number };
@@ -61,6 +62,8 @@ export function useCodexPulse() {
   const [demo, setDemo] = useState(false);
   const defaultDataUrl = useRef('./codexpulse-data.enc.json');
   const hiddenAt = useRef<number | null>(null);
+  const vaultRef = useRef<LocalVault>(EMPTY_VAULT);
+  const saves = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     let active = true;
@@ -106,31 +109,28 @@ export function useCodexPulse() {
   }, []);
 
   const loadData = useCallback(async (key: CryptoKey, bundle: ProtectedKeyBundle) => {
-    let envelope: EncryptedEnvelope | undefined;
-    let fromCache = false;
     try {
-      envelope = await fetchEnvelope(bundle.dataUrl);
+      const envelope = await fetchEnvelope(bundle.dataUrl);
       if (envelope.keyId !== bundle.keyId) throw new Error('KEY_ID');
+      const nextSnapshot = await decryptSnapshot(envelope, key);
       await secureStorage.set(storageKeys.snapshot, envelope);
+      setSnapshot(nextSnapshot);
+      setOfflineData(false);
+      return nextSnapshot;
     } catch {
-      envelope = await loadCachedEnvelope();
-      fromCache = true;
+      const envelope = await loadCachedEnvelope();
+      if (!envelope || envelope.keyId !== bundle.keyId) throw new Error('NO_SNAPSHOT');
+      const nextSnapshot = await decryptSnapshot(envelope, key);
+      setSnapshot(nextSnapshot);
+      setOfflineData(true);
+      return nextSnapshot;
     }
-    if (!envelope || envelope.keyId !== bundle.keyId) throw new Error('NO_SNAPSHOT');
-    const nextSnapshot = await decryptSnapshot(envelope, key);
-    setSnapshot(nextSnapshot);
-    setOfflineData(fromCache);
-    return nextSnapshot;
   }, []);
 
   const loadVault = useCallback(async (key: CryptoKey) => {
-    try {
-      const encrypted = await secureStorage.get<string>(storageKeys.localVault);
-      if (!encrypted) return EMPTY_VAULT;
-      return { ...EMPTY_VAULT, ...(await decryptLocalValue<LocalVault>(encrypted, key)) };
-    } catch {
-      return EMPTY_VAULT;
-    }
+    const encrypted = await secureStorage.get<string>(storageKeys.localVault);
+    if (!encrypted) return EMPTY_VAULT;
+    return validateVault(await decryptLocalValue<LocalVault>(encrypted, key));
   }, []);
 
   const setupPin = useCallback(async (pin: string) => {
@@ -140,12 +140,17 @@ export function useCodexPulse() {
     const key = await importMasterKey(raw);
     const code = await recoveryCodeFor(raw);
     raw.fill(0);
-    await secureStorage.set(storageKeys.protectedKey, bundle);
-    const encryptedVault = await encryptLocalValue(EMPTY_VAULT, key);
-    await secureStorage.set(storageKeys.localVault, encryptedVault);
+    const previousBundle = await loadProtectedKey();
+    if (previousBundle && previousBundle.keyId !== bundle.keyId) throw new Error('DIFFERENT_KEY');
+    const nextVault = await loadVault(key);
+    const encryptedVault = await encryptLocalValue(nextVault, key);
+    await secureStorage.setMany([[storageKeys.protectedKey, bundle], [storageKeys.localVault, encryptedVault]]);
+    await secureStorage.remove(storageKeys.failedUnlocks);
     setProtectedKey(bundle);
     setMasterKey(key);
-    setVault(EMPTY_VAULT);
+    vaultRef.current = nextVault;
+    setVault(nextVault);
+    setPairing(null);
     setRecoveryCode(code);
     try {
       await loadData(key, bundle);
@@ -154,17 +159,22 @@ export function useCodexPulse() {
     }
     setPhase('recovery');
     return code;
-  }, [loadData, pairing]);
+  }, [loadData, loadVault, pairing]);
 
   const recover = useCallback(async (code: string) => {
     const raw = await rawKeyFromRecoveryCode(code);
     try {
+      const existing = await loadProtectedKey();
+      const recoveryKeyId = existing?.keyId;
+      const recoveryDataUrl = existing?.dataUrl;
+      const recoveredId = await keyIdFor(raw);
+      if (recoveryKeyId && recoveredId !== recoveryKeyId) throw new Error('DIFFERENT_KEY');
       setPairing({
         version: 1,
         appUrl: window.location.href,
-        dataUrl: defaultDataUrl.current,
+        dataUrl: recoveryDataUrl || defaultDataUrl.current,
         key: bytesToBase64Url(raw),
-        keyId: await keyIdFor(raw),
+        keyId: recoveredId,
       });
       setError(null);
       setPhase('pairing');
@@ -200,6 +210,7 @@ export function useCodexPulse() {
     try {
       const [nextVault] = await Promise.all([loadVault(key), loadData(key, protectedKey)]);
       setMasterKey(key);
+      vaultRef.current = nextVault;
       setVault(nextVault);
       setPhase('ready');
       setError(null);
@@ -214,6 +225,8 @@ export function useCodexPulse() {
   const lock = useCallback(() => {
     if (demo || !protectedKey) return;
     setMasterKey(null);
+    setPairing(null);
+    setRecoveryCode(null);
     setSnapshot(null);
     setVault(EMPTY_VAULT);
     setPhase('locked');
@@ -246,14 +259,39 @@ export function useCodexPulse() {
   }, [demo, loadData, masterKey, protectedKey]);
 
   const updateVault = useCallback((updater: (current: LocalVault) => LocalVault) => {
-    setVault((current) => {
-      const next = updater(current);
-      if (masterKey) {
-        void encryptLocalValue(next, masterKey).then((encrypted) => secureStorage.set(storageKeys.localVault, encrypted));
-      }
-      return next;
-    });
+    const next = validateVault(updater(vaultRef.current));
+    vaultRef.current = next;
+    setVault(next);
+    if (masterKey) {
+      saves.current = saves.current.catch(() => undefined).then(async () => {
+        const encrypted = await encryptLocalValue(next, masterKey);
+        await secureStorage.set(storageKeys.localVault, encrypted);
+        setError(null);
+      });
+      void saves.current.catch(() => setError('SAVE_FAILED'));
+    }
   }, [masterKey]);
+
+  const backupVault = useCallback(async () => {
+    if (!masterKey || !protectedKey) throw new Error('LOCKED');
+    await saves.current;
+    const data = await encryptLocalValue(validateVault(vaultRef.current), masterKey);
+    await saveBackupFile(JSON.stringify({ version: 1, kind: 'codexpulse-vault', keyId: protectedKey.keyId, data }));
+  }, [masterKey, protectedKey]);
+
+  const restoreVault = useCallback(async (file: File) => {
+    if (!masterKey || !protectedKey || file.size > 5_000_000) throw new Error('BACKUP_INVALID');
+    const backup = JSON.parse(await file.text());
+    if (backup.version !== 1 || backup.kind !== 'codexpulse-vault' || backup.keyId !== protectedKey.keyId || typeof backup.data !== 'string') throw new Error('BACKUP_INVALID');
+    const restored = validateVault(await decryptLocalValue(backup.data, masterKey));
+    await saves.current.catch(() => undefined);
+    const currentEncrypted = await encryptLocalValue(vaultRef.current, masterKey);
+    const restoredEncrypted = await encryptLocalValue(restored, masterKey);
+    await secureStorage.setMany([['vault-before-restore', currentEncrypted], [storageKeys.localVault, restoredEncrypted]]);
+    vaultRef.current = restored;
+    setVault(restored);
+    setError(null);
+  }, [masterKey, protectedKey]);
 
   const setLanguage = useCallback((next: Language) => {
     saveLanguage(next);
@@ -263,11 +301,13 @@ export function useCodexPulse() {
   const enterDemo = useCallback(() => {
     setDemo(true);
     setSnapshot(DEMO_SNAPSHOT);
+    vaultRef.current = EMPTY_VAULT;
     setVault(EMPTY_VAULT);
     setPhase('ready');
   }, []);
 
   const resetDevice = useCallback(async () => {
+    await saves.current.catch(() => undefined);
     await secureStorage.clear();
     setDemo(false);
     setSnapshot(null);
@@ -281,11 +321,11 @@ export function useCodexPulse() {
   return useMemo(() => ({
     phase, language, pairing, protectedKey, snapshot, vault, recoveryCode, offlineData,
     error, isRefreshing, demo, setupPin, recover, finishRecovery, unlock, lock, refresh,
-    updateVault, setLanguage, enterDemo, resetDevice,
+    updateVault, setLanguage, enterDemo, resetDevice, backupVault, restoreVault,
   }), [
     phase, language, pairing, protectedKey, snapshot, vault, recoveryCode, offlineData,
     error, isRefreshing, demo, setupPin, recover, finishRecovery, unlock, lock, refresh,
-    updateVault, setLanguage, enterDemo, resetDevice,
+    updateVault, setLanguage, enterDemo, resetDevice, backupVault, restoreVault,
   ]);
 }
 

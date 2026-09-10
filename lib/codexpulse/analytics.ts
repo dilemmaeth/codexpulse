@@ -22,6 +22,9 @@ export type CategoryStat = { id: CategoryId; tasks: number; tokens: number; task
 export type ProjectStat = { id: string; name: string; tasks: number; tokens: number; share: number };
 
 export type MonthView = {
+  generatedAt: string;
+  generatedDate: string;
+  taskTokenTotal: number;
   month: MonthRecord;
   tasks: TaskRecord[];
   categories: CategoryStat[];
@@ -34,9 +37,31 @@ export type MonthView = {
   activityMs: number;
 };
 
+export function projectTarget(id: string, vault: LocalVault) {
+  const path: string[] = [];
+  let target = id;
+  while (vault.projectRules[target]?.mergeInto) {
+    if (path.includes(target)) return path.slice(path.indexOf(target)).sort()[0];
+    path.push(target);
+    target = vault.projectRules[target].mergeInto!;
+  }
+  return target;
+}
+
+export function canMergeProject(source: string, target: string, vault: LocalVault) {
+  const visited = new Set<string>([source]);
+  let current: string | null | undefined = target;
+  while (current) {
+    if (visited.has(current)) return false;
+    visited.add(current);
+    current = vault.projectRules[current]?.mergeInto;
+  }
+  return true;
+}
+
 function resolvedProject(task: TaskRecord, vault: LocalVault, allTasks: TaskRecord[] = [task]) {
   const ownRule = vault.projectRules[task.projectId];
-  const targetId = ownRule?.mergeInto || task.projectId;
+  const targetId = projectTarget(task.projectId, vault);
   const targetRule = vault.projectRules[targetId];
   const targetName = allTasks.find((item) => item.projectId === targetId)?.projectName;
   return {
@@ -61,12 +86,19 @@ function sumThroughDay(month: MonthRecord, day: number) {
   }, 0);
 }
 
+export function outcomeDate(task: TaskRecord, vault: LocalVault) {
+  if (taskOutcome(task, vault) === 'open') return null;
+  return vault.outcomeDates?.[task.id] || task.completedAt ||
+    (task.completedMonth ? `${task.completedMonth}-${task.updatedAt.slice(8, 10)}` : task.updatedAt.slice(0, 10));
+}
+
 function resultCount(tasks: TaskRecord[], monthId: string, vault: LocalVault, throughDay?: number) {
-  return tasks.filter((task) => {
-    if (task.completedMonth !== monthId || taskOutcome(task, vault) === 'open') return false;
-    if (!throughDay) return true;
-    return Number(task.updatedAt.slice(8, 10)) <= throughDay;
-  }).length;
+  return tasks.reduce((sum, task) => {
+    const date = outcomeDate(task, vault);
+    if (!date || date.slice(0, 7) !== monthId || (throughDay && Number(date.slice(8, 10)) > throughDay)) return sum;
+    const outcome = taskOutcome(task, vault);
+    return sum + (outcome === 'success' ? 1 : outcome === 'partial' ? 0.5 : 0);
+  }, 0);
 }
 
 export function buildMonthView(
@@ -78,7 +110,7 @@ export function buildMonthView(
   if (!month) return null;
   const tasks = snapshot.tasks.filter((item) => item.months[monthId]);
   const totalTaskTokens = tasks.reduce((sum, item) => sum + item.months[monthId].tokens, 0);
-  const scale = totalTaskTokens > 0 ? month.usage.totalTokens / totalTaskTokens : 1;
+  const scale = 1;
 
   const categories = CATEGORY_ORDER.map((id) => {
     const matching = tasks.filter((item) => taskCategory(item, vault) === id);
@@ -87,7 +119,7 @@ export function buildMonthView(
   }).filter((item) => item.tasks > 0 || item.tokens > 0);
   for (const item of categories) {
     item.taskShare = tasks.length ? (item.tasks / tasks.length) * 100 : 0;
-    item.tokenShare = month.usage.totalTokens ? (item.tokens / month.usage.totalTokens) * 100 : 0;
+    item.tokenShare = totalTaskTokens ? (item.tokens / totalTaskTokens) * 100 : 0;
   }
 
   const projectMap = new Map<string, ProjectStat>();
@@ -100,17 +132,18 @@ export function buildMonthView(
     projectMap.set(project.id, previous);
   }
   const projects = [...projectMap.values()].sort((a, b) => b.tokens - a.tokens);
-  for (const item of projects) item.share = month.usage.totalTokens ? (item.tokens / month.usage.totalTokens) * 100 : 0;
+  for (const item of projects) item.share = totalTaskTokens ? (item.tokens / totalTaskTokens) * 100 : 0;
 
   const outcomes = Object.fromEntries(OUTCOME_ORDER.map((id) => [id, 0])) as Record<OutcomeId, number>;
   for (const item of tasks) {
-    if (item.completedMonth === monthId || taskOutcome(item, vault) === 'open') outcomes[taskOutcome(item, vault)] += 1;
+    if (outcomeDate(item, vault)?.slice(0, 7) === monthId || taskOutcome(item, vault) === 'open') outcomes[taskOutcome(item, vault)] += 1;
   }
 
   const sortedMonths = [...snapshot.months].sort((a, b) => a.id.localeCompare(b.id));
   const monthIndex = sortedMonths.findIndex((item) => item.id === monthId);
-  const generatedMonth = snapshot.generatedAt.slice(0, 7);
-  const throughDay = monthId === generatedMonth ? Number(snapshot.generatedAt.slice(8, 10)) : undefined;
+  const generatedDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Budapest', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(snapshot.generatedAt));
+  const generatedMonth = generatedDate.slice(0, 7);
+  const throughDay = monthId === generatedMonth ? Number(generatedDate.slice(8, 10)) : undefined;
   const previous = sortedMonths.slice(Math.max(0, monthIndex - 3), monthIndex);
   const currentUsage = throughDay ? sumThroughDay(month, throughDay) : month.usage.totalTokens;
   const baselineUsage = previous.map((item) => throughDay ? sumThroughDay(item, throughDay) : item.usage.totalTokens).filter((n) => n > 0);
@@ -122,6 +155,9 @@ export function buildMonthView(
   const previousUsage = previousMonth ? (throughDay ? sumThroughDay(previousMonth, throughDay) : previousMonth.usage.totalTokens) : 0;
 
   return {
+    generatedAt: snapshot.generatedAt,
+    generatedDate,
+    taskTokenTotal: totalTaskTokens,
     month,
     tasks: tasks.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     categories,

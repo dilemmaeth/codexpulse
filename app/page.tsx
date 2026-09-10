@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCodexPulse, useServiceWorkerUpdate } from '@/hooks/use-codexpulse';
 import { buildMonthView } from '@/lib/codexpulse/analytics';
 import { t } from '@/lib/codexpulse/i18n';
+import { useClock } from '@/lib/codexpulse/use-clock';
 
 const navigation = [
   { value: 'month', key: 'month', icon: CalendarDays },
@@ -34,6 +35,7 @@ type ModelContext = {
 
 export default function Home() {
   const app = useCodexPulse();
+  const now = useClock();
   const { updateAvailable, updateNow } = useServiceWorkerUpdate();
   const [activeTab, setActiveTab] = useState('month');
   const months = useMemo(
@@ -99,7 +101,7 @@ export default function Home() {
   if (app.phase === 'unpaired') return <UnpairedGate language={app.language} onDemo={app.enterDemo} onRecover={app.recover} />;
   if (app.phase === 'pairing') return <PinSetupGate language={app.language} onSetup={app.setupPin} />;
   if (app.phase === 'recovery' && app.recoveryCode) return <RecoveryGate language={app.language} code={app.recoveryCode} onFinish={app.finishRecovery} />;
-  if (app.phase === 'locked') return <LockedGate language={app.language} onUnlock={app.unlock} />;
+  if (app.phase === 'locked') return <LockedGate language={app.language} onUnlock={app.unlock} onRecover={app.recover} />;
   if (app.phase === 'error' || !app.snapshot || !view) return <ErrorGate language={app.language} onRetry={() => window.location.reload()} />;
 
   return (
@@ -109,7 +111,7 @@ export default function Home() {
           <header className="topbar">
             <div className="brand-lockup" aria-label="CodexPulse"><span className="pulse-mark"><span /></span><span>CodexPulse</span></div>
             <div className="topbar-actions">
-              <span className={`sync-pill ${app.offlineData ? 'sync-offline' : ''}`}><span className="sync-dot" />{app.offlineData ? t(app.language, 'offline') : t(app.language, 'synced')}</span>
+              <span className={`sync-pill ${app.offlineData || now - Date.parse(app.snapshot.generatedAt) > 8 * 3600_000 ? 'sync-offline' : ''}`}><span className="sync-dot" />{app.offlineData ? t(app.language, 'offline') : now - Date.parse(app.snapshot.generatedAt) > 8 * 3600_000 ? (app.language === 'hu' ? 'Régi adat' : 'Older data') : t(app.language, 'synced')}</span>
               <SettingsDialog
                 language={app.language}
                 snapshot={app.snapshot}
@@ -122,11 +124,14 @@ export default function Home() {
                 onRefresh={() => void app.refresh()}
                 onLock={app.lock}
                 onReset={app.resetDevice}
+                onBackup={app.backupVault}
+                onRestore={app.restoreVault}
               />
             </div>
           </header>
           {updateAvailable && <aside className="update-banner"><span><RefreshCw />{t(app.language, 'updateAvailable')}</span><Button size="sm" onClick={updateNow}>{t(app.language, 'updateNow')}</Button></aside>}
           {app.demo && <aside className="demo-banner"><Sparkles />{t(app.language, 'demoBanner')}</aside>}
+          {app.error && <aside className="quality-note" role="alert">{app.language === 'hu' ? 'Az adatbetöltés vagy mentés nem sikerült. A legutóbbi módosítás még nincs biztonságban: próbáld újra, vagy készíts titkosított mentést.' : 'Loading or saving failed. The latest changes may not be saved: retry or export an encrypted backup.'}</aside>}
           <TabsContent value="month" className="screen-content"><MonthScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} rateLimits={app.snapshot.rateLimits} /></TabsContent>
           <TabsContent value="projects" className="screen-content"><ProjectsScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} /></TabsContent>
           <TabsContent value="activity" className="screen-content"><ActivityScreen key={activeMonth} language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} vault={app.vault} onVault={app.updateVault} /></TabsContent>

@@ -93,7 +93,7 @@ export function renderReport(payload: ReportPayload) {
   const resultsIndex = view.resultsIndex === null ? '—' : `${Math.round(view.resultsIndex)}%`;
   drawMetric(context, 70, 288, 340, language === 'hu' ? 'Használati index' : 'Usage index', usageIndex, language === 'hu' ? 'személyes átlaghoz' : 'vs personal average');
   drawMetric(context, 450, 288, 340, language === 'hu' ? 'Összes token' : 'Total tokens', compact(view.month.usage.totalTokens, language), language === 'hu' ? 'cache-sel együtt' : 'including cache');
-  drawMetric(context, 830, 288, 340, language === 'hu' ? 'Eredményindex' : 'Results index', resultsIndex, `${view.outcomes.success + view.outcomes.partial} ${language === 'hu' ? 'lezárt feladat' : 'closed tasks'}`);
+  drawMetric(context, 830, 288, 340, language === 'hu' ? 'Eredményindex' : 'Results index', resultsIndex, `${view.outcomes.success + view.outcomes.partial * 0.5} ${language === 'hu' ? 'eredménypont' : 'outcome points'}`);
 
   roundRect(context, 70, 500, 1100, 560, 30);
   context.fillStyle = '#0a1721';
@@ -136,6 +136,7 @@ export function renderReport(payload: ReportPayload) {
     });
   }
 
+  text(context, language === 'hu' ? 'Eredménypont: sikeres 1 · részleges 0,5 · sikertelen/nyitott 0. A besorolás javítható becslés.' : 'Outcome points: success 1 · partial 0.5 · failed/open 0. Classification is a correctable estimate.', 70, 1628, 16, '#79909e', 500);
   text(context, generatedLabel, 70, 1668, 16, '#536b78', 500);
   text(context, language === 'hu' ? 'API-egyenértékű költség · nem ChatGPT-számla' : 'API-equivalent cost · not a ChatGPT bill', 1170, 1668, 16, '#536b78', 500, 'right');
   return canvas;

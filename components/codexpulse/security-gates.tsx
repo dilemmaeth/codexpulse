@@ -55,12 +55,13 @@ function SecurityShell({ icon, title, body, children }: {
   );
 }
 
-export function UnpairedGate({ language, onDemo, onRecover }: {
+export function UnpairedGate({ language, onDemo, onRecover, recoveryOnly = false }: {
+  recoveryOnly?: boolean;
   language: Language;
   onDemo: () => void;
   onRecover: (code: string) => Promise<void>;
 }) {
-  const [showRecovery, setShowRecovery] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(recoveryOnly);
   const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -78,11 +79,11 @@ export function UnpairedGate({ language, onDemo, onRecover }: {
   };
   return (
     <SecurityShell icon={<QrCode />} title={t(language, 'pairingTitle')} body={t(language, 'pairingBody')}>
-      <div className="pairing-steps">
+      {!recoveryOnly && <div className="pairing-steps">
         <span><b>1</b>{language === 'hu' ? 'Nyisd meg a CodexPulse párosítót a gépen.' : 'Open the CodexPulse pairing tool on your PC.'}</span>
         <span><b>2</b>{language === 'hu' ? 'Olvasd be a QR-kódot ezzel az iPhone-nal.' : 'Scan its QR code with this iPhone.'}</span>
         <span><b>3</b>{language === 'hu' ? 'Állítsd be a PIN-kódodat.' : 'Set your PIN code.'}</span>
-      </div>
+      </div>}
       {showRecovery ? (
         <div className="recovery-entry">
           <label htmlFor="recovery-code-input">{t(language, 'enterRecovery')}</label>
@@ -103,7 +104,7 @@ export function UnpairedGate({ language, onDemo, onRecover }: {
       ) : (
         <Button variant="outline" size="lg" className="wide-button" onClick={() => setShowRecovery(true)}>{t(language, 'useRecovery')}</Button>
       )}
-      <Button variant="ghost" size="lg" className="wide-button" onClick={onDemo}>{t(language, 'demoMode')}</Button>
+      <Button variant="ghost" size="lg" className="wide-button" onClick={onDemo}>{recoveryOnly ? t(language, 'cancel') : t(language, 'demoMode')}</Button>
     </SecurityShell>
   );
 }
@@ -138,6 +139,7 @@ export function PinSetupGate({ language, onSetup }: { language: Language; onSetu
       <Button size="lg" className="wide-button primary-action" disabled={busy || pin.length !== 6 || repeat.length !== 6} onClick={() => void submit()}>
         {busy ? <span className="button-spinner" /> : <ShieldCheck />}{t(language, 'continue')}
       </Button>
+      <Button variant="ghost" className="wide-button" disabled={busy} onClick={() => window.location.reload()}>{t(language, 'cancel')}</Button>
     </SecurityShell>
   );
 }
@@ -160,12 +162,14 @@ export function RecoveryGate({ language, code, onFinish }: { language: Language;
   );
 }
 
-export function LockedGate({ language, onUnlock }: { language: Language; onUnlock: (pin: string) => Promise<boolean> }) {
+export function LockedGate({ language, onUnlock, onRecover }: { language: Language; onUnlock: (pin: string) => Promise<boolean>; onRecover: (code: string) => Promise<void> }) {
+  const [recovering, setRecovering] = useState(false);
   const [pin, setPin] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  if (recovering) return <UnpairedGate language={language} recoveryOnly onRecover={onRecover} onDemo={() => setRecovering(false)} />;
   const submit = async (value = pin) => {
     if (value.length !== 6 || busy) return;
     setBusy(true);
@@ -188,6 +192,7 @@ export function LockedGate({ language, onUnlock }: { language: Language; onUnloc
       <Button size="lg" className="wide-button primary-action" disabled={busy || pin.length !== 6} onClick={() => void submit()}>
         {busy ? <span className="button-spinner" /> : <LockKeyhole />}{t(language, 'unlock')}
       </Button>
+      <Button variant="ghost" className="wide-button" onClick={() => setRecovering(true)}>{language === 'hu' ? 'Elfelejtettem a PIN-kódot' : 'Forgot PIN'}</Button>
     </SecurityShell>
   );
 }

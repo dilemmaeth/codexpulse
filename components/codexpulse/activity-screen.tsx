@@ -62,14 +62,14 @@ export function ActivityScreen({ language, view, months, selectedMonth, onMonth,
     </section>
     <section className="panel compact-tasks" aria-labelledby="activity-tasks-heading">
       <div className="panel-heading"><h2 id="activity-tasks-heading">{t(language, 'recentTasks')}</h2><span className="activity-subtle">{view.tasks.length}</span></div>
-      <p className="activity-hint">{hu ? 'Nyiss meg egy feladatot a besorolás módosításához.' : 'Open a task to change its category or outcome.'}</p>
+      <p className="activity-hint">{hu ? 'Feladatszintű becslések; nem a havi naplóösszeg felosztása. A korábbi havi értékek rögzítettek. Az eredmény javítása a kiválasztott hónapra vonatkozik.' : 'Task-level estimates, not a split of the monthly log total. Historical monthly values are frozen. Outcome corrections apply to the selected month.'}</p>
       {view.tasks.slice(0, taskLimit).map((task) => <details key={task.id} className="compact-task">
         <summary><div><strong>{task.title}</strong><span>{projectName(task, vault, view.tasks)} · {number(task.months[selectedMonth].tokens)} token</span><small>{categoryLabel(language, effectiveCategory(task, vault))} · {outcomeLabel(language, effectiveOutcome(task, vault))}</small></div><ChevronDown aria-hidden="true" /></summary>
         <div className="task-controls">
           <label><span>{t(language, 'category')}</span><Select value={effectiveCategory(task, vault)} onValueChange={(value) => onVault((current) => ({ ...current, categoryOverrides: { ...current.categoryOverrides, [task.id]: value as CategoryId } }))}>
             <SelectTrigger className="task-select" aria-label={t(language, 'category')}><SelectValue>{categoryLabel(language, effectiveCategory(task, vault))}</SelectValue></SelectTrigger><SelectContent>{CATEGORY_ORDER.map((category) => <SelectItem key={category} value={category}>{categoryLabel(language, category)}</SelectItem>)}</SelectContent>
           </Select></label>
-          <label><span>{t(language, 'outcome')}</span><Select value={effectiveOutcome(task, vault)} onValueChange={(value) => onVault((current) => ({ ...current, outcomeOverrides: { ...current.outcomeOverrides, [task.id]: value as OutcomeId } }))}>
+          <label><span>{t(language, 'outcome')}</span><Select value={effectiveOutcome(task, vault)} onValueChange={(value) => onVault((current) => ({ ...current, outcomeOverrides: { ...current.outcomeOverrides, [task.id]: value as OutcomeId }, outcomeDates: { ...current.outcomeDates, [task.id]: `${selectedMonth}-${selectedMonth === view.generatedDate.slice(0, 7) ? view.generatedDate.slice(8, 10) : new Date(Date.UTC(Number(selectedMonth.slice(0, 4)), Number(selectedMonth.slice(5, 7)), 0)).getUTCDate()}` } }))}>
             <SelectTrigger className="task-select" aria-label={t(language, 'outcome')}><SelectValue>{outcomeLabel(language, effectiveOutcome(task, vault))}</SelectValue></SelectTrigger><SelectContent>{(['success', 'partial', 'failed', 'open'] as OutcomeId[]).map((outcome) => <SelectItem key={outcome} value={outcome}>{outcomeLabel(language, outcome)}</SelectItem>)}</SelectContent>
           </Select></label>
         </div>

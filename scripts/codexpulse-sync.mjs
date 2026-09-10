@@ -5,6 +5,8 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, relative, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { updateEventLedger, usageDay } from './codexpulse-ledger.mjs';
+import { withLock } from './codexpulse-lock.mjs';
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PRIVATE_ROOT = join(PROJECT_ROOT, '.codexpulse', 'private');
@@ -56,7 +58,7 @@ function monthId(value) {
 }
 
 function dayId(value) {
-  return new Date(value).toISOString().slice(0, 10);
+  return usageDay(value);
 }
 
 function safeJson(value, fallback = null) {
@@ -257,7 +259,7 @@ function allocateTaskMonths(group, groupTurns, exactFromMonth) {
   const buckets = new Map();
   for (const turn of groupTurns) {
     const date = asIso(turn.started_at || turn.completed_at, group.updatedMs);
-    const month = monthId(date);
+    const month = dayId(date).slice(0, 7);
     const bucket = buckets.get(month) || { turns: 0, activityMs: 0 };
     bucket.turns += 1;
     bucket.activityMs += Math.max(0, Math.min(Number(turn.duration_ms || 0), 6 * 60 * 60 * 1000));
@@ -332,7 +334,8 @@ function buildTasks(database) {
       outcome,
       createdAt: new Date(group.createdMs).toISOString(),
       updatedAt,
-      completedMonth: outcome === 'open' ? null : monthId(updatedAt),
+      completedMonth: outcome === 'open' ? null : dayId(asIso(latestFinal?.completedAt, group.updatedMs)).slice(0, 7),
+      completedAt: outcome === 'open' ? null : dayId(asIso(latestFinal?.completedAt, group.updatedMs)),
       models: [...group.models].sort((left, right) => left.localeCompare(right)),
       months: allocateTaskMonths(group, groupTurns, EXACT_FROM.slice(0, 7)),
       _latestModel: latestGroupThread.model || 'unknown',
@@ -415,72 +418,6 @@ function estimatedUsage(totalTokens, usageCache) {
   };
 }
 
-function consumeLedgerTokens(days, count) {
-  let remaining = count;
-  for (const date of Object.keys(days).sort((left, right) => left.localeCompare(right))) {
-    if (remaining <= 0) break;
-    const entry = days[date];
-    if (remaining >= entry.totalTokens) {
-      remaining -= entry.totalTokens;
-      delete days[date];
-      continue;
-    }
-    const keptRatio = (entry.totalTokens - remaining) / entry.totalTokens;
-    entry.totalTokens -= remaining;
-    entry.models = Object.fromEntries(Object.entries(entry.models || {}).map(([model, tokens]) => [model, Number(tokens) * keptRatio]));
-    remaining = 0;
-  }
-}
-
-function updateIncrementalLedger(config, tasks, usageCache, generatedAt) {
-  if (!usageCache) return null;
-  const cacheTotal = Number(usageCache.totals?.totalTokens || 0);
-  const currentTaskTokens = Object.fromEntries(tasks.map((task) => [task.id, Object.values(task.months)
-    .reduce((sum, slice) => sum + slice.tokens, 0)]));
-  const currentTotal = Object.values(currentTaskTokens).reduce((sum, tokens) => sum + Number(tokens), 0);
-  const ledger = config.incrementalUsage?.version === 1 ? config.incrementalUsage : {
-    version: 1,
-    cacheTotal,
-    lastTaskTotal: cacheTotal,
-    taskTokens: {},
-    days: {},
-  };
-
-  if (cacheTotal > Number(ledger.cacheTotal || 0)) {
-    consumeLedgerTokens(ledger.days, cacheTotal - Number(ledger.cacheTotal || 0));
-    ledger.cacheTotal = cacheTotal;
-  }
-
-  const totalDelta = Math.max(0, currentTotal - Number(ledger.lastTaskTotal || 0));
-  if (totalDelta > 0) {
-    const hasTaskBaseline = Object.keys(ledger.taskTokens || {}).length > 0;
-    const cacheGeneratedAt = Date.parse(usageCache.generatedAt || '');
-    const allocations = tasks.map((task) => ({
-      model: task._latestModel || task.models.at(-1) || 'unknown',
-      tokens: hasTaskBaseline
-        ? Math.max(0, Number(currentTaskTokens[task.id]) - Number(ledger.taskTokens?.[task.id] || 0))
-        : (Number.isFinite(cacheGeneratedAt) && Date.parse(task.updatedAt) >= cacheGeneratedAt ? Number(currentTaskTokens[task.id]) : 0),
-    })).filter((item) => item.tokens > 0);
-    const observedDelta = allocations.reduce((sum, item) => sum + item.tokens, 0);
-    const date = generatedAt.slice(0, 10);
-    const entry = ledger.days[date] || { totalTokens: 0, models: {} };
-    entry.totalTokens += totalDelta;
-    if (observedDelta > 0) {
-      for (const allocation of allocations) {
-        const tokens = totalDelta * allocation.tokens / observedDelta;
-        entry.models[allocation.model] = Number(entry.models[allocation.model] || 0) + tokens;
-      }
-    } else {
-      entry.models.unknown = Number(entry.models.unknown || 0) + totalDelta;
-    }
-    ledger.days[date] = entry;
-  }
-
-  ledger.lastTaskTotal = currentTotal;
-  ledger.taskTokens = currentTaskTokens;
-  config.incrementalUsage = ledger;
-  return ledger;
-}
 
 function buildMonths(tasks, usageCache, incrementalLedger) {
   const monthMap = new Map();
@@ -558,7 +495,7 @@ function buildMonths(tasks, usageCache, incrementalLedger) {
     for (const [date, entry] of Object.entries(incrementalLedger.days || {})) {
       const month = ensureMonth(date.slice(0, 7));
       if (!month.days.has(date)) month.days.set(date, { ...zeroUsage(), date, turns: 0, activeTasks: 0, estimated: true });
-      const estimate = estimatedUsage(Number(entry.totalTokens || 0), usageCache);
+      const estimate = { ...estimatedUsage(Number(entry.totalTokens || 0), usageCache), ...entry };
       addUsage(month.days.get(date), estimate);
       addUsage(month.usage, estimate);
       month.days.get(date).estimated = true;
@@ -567,7 +504,7 @@ function buildMonths(tasks, usageCache, incrementalLedger) {
         ...Object.keys(entry.models || {}),
       ])].sort((a, b) => a.localeCompare(b));
       month.estimated = true;
-      month.estimateReasons.push('incremental-allocation');
+      month.estimateReasons.push('event-tokens-estimated-api-cost');
       for (const [model, tokens] of Object.entries(entry.models || {})) {
         month.models.set(model, (month.models.get(model) || 0) + Number(tokens));
       }
@@ -586,19 +523,16 @@ function buildMonths(tasks, usageCache, incrementalLedger) {
 
 function countLargeRollouts(tasks) {
   const paths = new Set(tasks.flatMap((task) => task._rolloutPaths));
-  let count = 0;
-  for (const value of paths) {
-    try { if (statSync(value).size > 512 * 1024 * 1024) count += 1; } catch { /* file moved */ }
-  }
-  return { sourceFiles: paths.size, skippedLargeFiles: count };
+  return { sourceFiles: paths.size, skippedLargeFiles: 0 };
 }
 
 function buildSnapshot(config) {
   const generatedAt = new Date().toISOString();
   const database = readDatabases();
   const internalTasks = buildTasks(database);
-  const usageCache = readUsageCache();
-  const incrementalLedger = updateIncrementalLedger(config, internalTasks, usageCache, generatedAt);
+  const { ledger, missingFiles } = updateEventLedger(config, internalTasks, readUsageCache());
+  const usageCache = ledger.baseCache;
+  const incrementalLedger = ledger;
   const files = countLargeRollouts(internalTasks);
   const snapshot = {
     schemaVersion: 1,
@@ -613,6 +547,9 @@ function buildSnapshot(config) {
       rolledUpSubagents: database.edges.length,
       sourceFiles: files.sourceFiles,
       skippedLargeFiles: files.skippedLargeFiles,
+      missingUsageFiles: missingFiles,
+      timeZone: 'Europe/Budapest',
+      usageBaselineAt: ledger.cutoff,
     },
   };
   return snapshot;
@@ -650,6 +587,8 @@ async function inputSignature() {
     HISTORY_DATABASE,
     `${HISTORY_DATABASE}-wal`,
     USAGE_CACHE,
+    fileURLToPath(import.meta.url),
+    join(PROJECT_ROOT, 'scripts', 'codexpulse-ledger.mjs'),
   ];
   const details = await Promise.all(files.map(fileFingerprint));
   return createHash('sha256').update(details.join('|')).digest('hex');
@@ -690,7 +629,8 @@ async function ensureConfig() {
 
 async function main() {
   const { config, masterKey } = await ensureConfig();
-  if (args.resetLedger) delete config.incrementalUsage;
+  // Explicit repair only; normal sync never replaces the frozen baseline.
+  if (args.resetLedger) { delete config.incrementalUsage; delete config.eventUsage; }
   const signature = await inputSignature();
   const output = resolve(args.output || DEFAULT_OUTPUT);
   if (!args.force && config.lastSignature === signature && existsSync(output)) {
@@ -715,7 +655,7 @@ async function main() {
   })}\n`);
 }
 
-main().catch((error) => {
+withLock(join(PRIVATE_ROOT, 'sync.lock'), main).catch((error) => {
   process.stderr.write(`CodexPulse sync failed: ${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;
 });

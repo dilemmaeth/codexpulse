@@ -36,11 +36,8 @@ async function main() {
     return;
   }
   const syncResult = JSON.parse(String(sync.stdout).trim());
-  if (syncResult.status !== 'updated') {
-    await log({ status: 'unchanged', generatedAt: syncResult.generatedAt || null });
-    return;
-  }
-
+  // Publishing tracks its own receipt, including a pending Pages dispatch.
+  // An unchanged collector must not suppress retries after a network failure.
   const publish = run('codexpulse-publish.mjs');
   if (publish.status !== 0) {
     await log({ status: 'publish-failed', generatedAt: syncResult.generatedAt, detail: String(publish.stderr || '').trim().split(/\r?\n/u).at(-1) || 'unknown' });

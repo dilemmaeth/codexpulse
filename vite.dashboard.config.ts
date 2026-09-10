@@ -7,7 +7,12 @@ export default defineConfig({
   root: 'dashboard',
   base: './',
   publicDir: resolve(__dirname, 'public'),
-  plugins: [react()],
+  plugins: [react(), {
+    name: 'codexpulse-offline-manifest',
+    generateBundle(_options, bundle) {
+      this.emitFile({ type: 'asset', fileName: 'sw-assets.json', source: JSON.stringify(Object.keys(bundle).filter((name) => name.startsWith('assets/'))) });
+    },
+  }],
   resolve: {
     alias: {
       '@': resolve(__dirname, '.'),

@@ -1,0 +1,4 @@
+{"timestamp":"2026-08-31T21:00:00Z","type":"turn_context","payload":{"model":"example-model"}}
+{"timestamp":"2026-08-31T21:01:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":80,"output_tokens":20,"total_tokens":120},"last_token_usage":{"input_tokens":100,"cached_input_tokens":80,"output_tokens":20,"total_tokens":120}}}}
+{"timestamp":"2026-08-31T22:30:00Z","type":"turn_context","payload":{"model":"example-model-2"}}
+{"timestamp":"2026-08-31T22:31:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":120,"cached_input_tokens":90,"output_tokens":30,"total_tokens":150},"last_token_usage":{"input_tokens":20,"cached_input_tokens":10,"output_tokens":10,"total_tokens":30}}}}

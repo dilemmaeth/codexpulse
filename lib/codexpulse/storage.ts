@@ -21,7 +21,8 @@ async function transaction<T>(mode: IDBTransactionMode, action: (store: IDBObjec
     return await new Promise<T>((resolve, reject) => {
       const tx = database.transaction(STORE, mode);
       const request = action(tx.objectStore(STORE));
-      request.onsuccess = () => resolve(request.result);
+      tx.oncomplete = () => resolve(request.result);
+      tx.onabort = () => reject(tx.error || new Error('STORAGE_ABORT'));
       request.onerror = () => reject(request.error);
     });
   } finally {
@@ -33,12 +34,26 @@ export const secureStorage = {
   get<T>(key: string) { return transaction<T | undefined>('readonly', (store) => store.get(key)); },
   set<T>(key: string, value: T) { return transaction<IDBValidKey>('readwrite', (store) => store.put(value, key)); },
   remove(key: string) { return transaction<undefined>('readwrite', (store) => store.delete(key)); },
+  async setMany(entries: [string, unknown][]) {
+    const database = await openDatabase();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = database.transaction(STORE, 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error || new Error('STORAGE_ABORT'));
+        tx.onerror = () => reject(tx.error);
+        for (const [key, value] of entries) tx.objectStore(STORE).put(value, key);
+      });
+    } finally { database.close(); }
+  },
   async clear() {
     const database = await openDatabase();
     try {
       await new Promise<void>((resolve, reject) => {
-        const request = database.transaction(STORE, 'readwrite').objectStore(STORE).clear();
-        request.onsuccess = () => resolve();
+        const tx = database.transaction(STORE, 'readwrite');
+        const request = tx.objectStore(STORE).clear();
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error || new Error('STORAGE_ABORT'));
         request.onerror = () => reject(request.error);
       });
     } finally {

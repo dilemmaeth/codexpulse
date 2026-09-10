@@ -59,6 +59,7 @@ export type TaskRecord = {
   createdAt: string;
   updatedAt: string;
   completedMonth: string | null;
+  completedAt?: string | null;
   models: string[];
   months: Record<string, TaskMonthSlice>;
 };
@@ -106,6 +107,7 @@ export type ProjectRule = {
 export type LocalVault = {
   categoryOverrides: Record<string, CategoryId>;
   outcomeOverrides: Record<string, OutcomeId>;
+  outcomeDates?: Record<string, string>;
   projectRules: Record<string, ProjectRule>;
   reportIncludesProjects: boolean;
 };

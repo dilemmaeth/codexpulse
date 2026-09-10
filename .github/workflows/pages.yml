@@ -48,6 +48,12 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
+      - name: Regression tests
+        run: npm test
+
+      - name: Lint application
+        run: npm run lint
+
       - name: Build static app
         run: npm run build:pages
 

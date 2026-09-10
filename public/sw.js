@@ -1,4 +1,4 @@
-const CACHE_NAME = 'codexpulse-shell-v1.1';
+const CACHE_NAME = 'codexpulse-shell-v1.2';
 const ROOT = new URL('./', self.registration.scope).href;
 const CORE = [
   ROOT,
@@ -8,13 +8,20 @@ const CORE = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE)));
+  event.waitUntil((async () => {
+    const response = await fetch(new URL('sw-assets.json', ROOT), { cache: 'no-store' });
+    if (!response.ok) throw new Error('Missing offline asset manifest');
+    const assets = await response.json();
+    if (!Array.isArray(assets) || assets.some((asset) => typeof asset !== 'string' || !asset.startsWith('assets/') || asset.includes('..'))) throw new Error('Invalid offline assets');
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll([...CORE, ...assets.map((asset) => new URL(asset, ROOT).href)]);
+  })());
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith('codexpulse-shell-') && key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim()),
   );
 });

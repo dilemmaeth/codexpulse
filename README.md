@@ -12,12 +12,14 @@ CodexPulse is a private, installable iPhone dashboard for reviewing local Codex 
 - July and August 2026 estimates kept as separate months
 - Installable offline PWA with a safe update prompt
 - QR pairing, a 6-digit PIN and a checksum-protected recovery code
+- Recovery from the locked screen without discarding same-key corrections
+- Encrypted correction backups (save to Files and restore on a paired device)
 
 ## Privacy model
 
-The Windows collector reads the local Codex SQLite indexes and the small ccusage cache. For current rate-limit indicators it reads only bounded tails from up to eight recent rollout files; it never performs a periodic full-log scan. It rolls subagents into their root task and never publishes raw prompts, chat messages, rollout logs or local paths.
+The Windows collector reads local Codex SQLite indexes and a frozen ccusage baseline. On first migration it reads rollout tails back to that baseline timestamp; later runs read only appended complete lines. It keeps token counters, dates and models, never raw conversation text. Rate-limit indicators use bounded tails from up to eight recent files. Subagents roll into their root task. Raw prompts, messages, rollout logs, paths and keys never enter the public artifact.
 
-The snapshot is encrypted locally with AES-256-GCM before it can leave the PC. GitHub receives only ciphertext and minimal envelope metadata. The data key is transferred in the URL fragment of the one-time pairing QR; URL fragments are not sent to the web server. On the iPhone, the data key is wrapped with a key derived from the PIN using PBKDF2-HMAC-SHA256 (600,000 iterations), then stored in IndexedDB. Decrypted data exists only in memory while the app is unlocked.
+The snapshot is encrypted locally with AES-256-GCM before it can leave the PC. GitHub receives only ciphertext and minimal envelope metadata. The data key is transferred in the URL fragment of the private pairing QR; URL fragments are not sent to the web server. The QR is reusable and must remain secret. On the iPhone, the data key is wrapped with a key derived from the PIN using PBKDF2-HMAC-SHA256 (600,000 iterations), then stored in IndexedDB. Decrypted data exists only in memory while the app is unlocked.
 
 Keep the generated QR and recovery code private. A public GitHub repository is required for free GitHub Pages hosting, so the source code and encrypted snapshot are publicly downloadable even though the snapshot content is not readable without the key.
 
@@ -25,11 +27,26 @@ The six-digit PIN and in-app retry delays are a convenient device lock, not a su
 
 ## Data quality
 
-- Token totals use the local ccusage cache where available.
-- July and August 2026 task allocation is estimated from recorded turns and activity.
-- A small amount of activity newer than the ccusage cache can appear as an estimated current-month delta.
+- Token totals combine an immutable timestamped ccusage baseline with subsequent token events. Updating the external cache cannot add those events again. Replayed/fork-inherited events are deduplicated.
+- Daily event dates use Europe/Budapest, including month boundaries. The migration boundary and incomplete source history remain limitations, not independently verified billing records.
+- July and August remain separate estimates. Initial per-task month allocations are estimates frozen at migration; new observed tokens are appended to their event month. Task/project/category estimates use the same unscaled basis, separate from monthly log totals.
+- Results index uses success = 1, partial = 0.5, failed/open = 0, compared with matching elapsed periods in previous months. Automatic outcomes are heuristics; corrections record the selected month.
+- New event token fields come from the logs. Their API cost uses the frozen baseline's average cost per token, not current model-specific pricing. Days containing this estimate are marked estimated.
 - Activity duration is a recorded Codex activity period, not a claim about human work hours.
 - The displayed USD amount is an API-price equivalent estimate, not a ChatGPT invoice or credit balance.
+- Quotas are timestamped observations, not live account limits. Expired windows are not displayed as current percentages.
+
+## Recovery and correction backups
+
+The CP1 recovery code restores the data key, not a copy of device-local corrections. Same-key PIN recovery preserves existing corrections; corrupt or different-key data blocks replacement rather than silently resetting it. Export an encrypted correction backup from Settings and save it outside browser storage. To restore on a new device, first pair with the same key/recovery code, then import the backup. Import explicitly replaces the current corrections after confirmation. No key or PIN is included in that backup.
+
+Writes are serialized and resolve after IndexedDB transaction completion. Downloaded snapshots are authenticated before replacing the last valid offline copy. Browser/site-data deletion can still remove local data, so a saved backup is necessary for disaster recovery.
+
+## Regression checks
+
+Run `npm test`, `npm run typecheck`, `npm run lint`, `npm audit`, and `npm run build:pages`. The Pages workflow runs tests and scoped lint before deployment. The service worker precaches the generated JS/CSS asset manifest and deletes only older CodexPulse caches.
+
+The publisher records success only after a successful Pages run. Failed uploads or deployments are retried on the next scheduled run even if collection is unchanged. Unchanged successful publications need no network call.
 
 ## Local verification
 
