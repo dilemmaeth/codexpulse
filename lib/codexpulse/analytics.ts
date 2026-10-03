@@ -30,6 +30,7 @@ export type MonthView = {
   categories: CategoryStat[];
   projects: ProjectStat[];
   outcomes: Record<OutcomeId, number>;
+  resultPoints: number;
   usageIndex: number | null;
   resultsIndex: number | null;
   previousMonthChange: number | null;
@@ -137,16 +138,21 @@ export function buildMonthView(
   const projects = [...projectMap.values()].sort((a, b) => b.tokens - a.tokens);
   for (const item of projects) item.share = totalTaskTokens ? (item.tokens / totalTaskTokens) * 100 : 0;
 
-  const outcomes = Object.fromEntries(OUTCOME_ORDER.map((id) => [id, 0])) as Record<OutcomeId, number>;
-  for (const item of tasks) {
-    if (outcomeDate(item, vault)?.slice(0, 7) === monthId || taskOutcome(item, vault) === 'open') outcomes[taskOutcome(item, vault)] += 1;
-  }
-
   const sortedMonths = [...snapshot.months].sort((a, b) => a.id.localeCompare(b.id));
   const monthIndex = sortedMonths.findIndex((item) => item.id === monthId);
   const generatedDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Budapest', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(snapshot.generatedAt));
   const generatedMonth = generatedDate.slice(0, 7);
   const throughDay = monthId === generatedMonth ? Number(generatedDate.slice(8, 10)) : undefined;
+  const outcomes = Object.fromEntries(OUTCOME_ORDER.map((id) => [id, 0])) as Record<OutcomeId, number>;
+  for (const item of snapshot.tasks) {
+    const date = outcomeDate(item, vault);
+    const outcome = taskOutcome(item, vault);
+    if (outcome === 'open') {
+      if (item.months[monthId]) outcomes.open++;
+    } else if (date?.slice(0, 7) === monthId && (!throughDay || Number(date.slice(8, 10)) <= throughDay)) {
+      outcomes[outcome]++;
+    }
+  }
   const previous = sortedMonths.slice(Math.max(0, monthIndex - 3), monthIndex);
   const currentUsage = throughDay ? sumThroughDay(month, throughDay) : month.usage.totalTokens;
   const baselineUsage = previous.map((item) => throughDay ? sumThroughDay(item, throughDay) : item.usage.totalTokens).filter((n) => n > 0);
@@ -166,6 +172,7 @@ export function buildMonthView(
     categories,
     projects,
     outcomes,
+    resultPoints: currentResults,
     usageIndex: usageAverage ? (currentUsage / usageAverage) * 100 : null,
     resultsIndex: resultAverage ? (currentResults / resultAverage) * 100 : null,
     previousMonthChange: previousUsage ? ((currentUsage - previousUsage) / previousUsage) * 100 : null,

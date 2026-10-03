@@ -19,28 +19,32 @@ async function harness({ wrongNetwork = false } = {}) {
   const initialEncrypted = await cryptoTools.encryptLocalValue(vault, key);
   const cached = { version: 1, algorithm: 'A256GCM', keyId: bundle.keyId, data: 'valid' };
   const memory = new Map([[keys.protectedKey, bundle], [keys.localVault, initialEncrypted], [keys.snapshot, cached]]);
-  let stateIndex = 0; let downloaded;
+  let stateIndex = 0; let refIndex = 0; let downloaded; let failSave = false; let networkGate = null;
   const states = ['ready', 'hu', { version: 1, key: cryptoTools.bytesToBase64Url(raw), keyId: bundle.keyId, dataUrl: bundle.dataUrl }, bundle, key, { generatedAt: '2026-09-10T00:00:00Z' }, vault];
   const refs = [];
-  const storage = { get: async name => memory.get(name), set: async (name, value) => memory.set(name, value), remove: async name => memory.delete(name), setMany: async entries => { for (const [name, value] of entries) memory.set(name, value); }, clear: async () => memory.clear() };
+  const storage = { get: async name => memory.get(name), set: async (name, value) => { if (failSave && name === keys.localVault) throw new Error('STORAGE_FULL'); memory.set(name, value); }, remove: async name => memory.delete(name), setMany: async entries => { for (const [name, value] of entries) memory.set(name, value); }, clear: async () => memory.clear() };
   const context = vm.createContext({ ...cryptoTools, validateVault, EMPTY_VAULT: empty, DEMO_SNAPSHOT: {},
-    useState: initial => [stateIndex < states.length ? states[stateIndex++] : (stateIndex++, initial), () => {}],
-    useRef: value => { const ref = { current: value }; refs.push(ref); return ref; }, useEffect: () => {}, useCallback: fn => fn, useMemo: fn => fn(),
+    useState: initial => { const index = stateIndex++; if (index >= states.length) states[index] = initial; return [states[index], value => { states[index] = value; }]; },
+    useRef: value => { const index = refIndex++; refs[index] ||= { current: value }; return refs[index]; }, useEffect: () => {}, useCallback: fn => fn, useMemo: fn => fn(),
     secureStorage: storage, storageKeys: keys, loadProtectedKey: async () => memory.get(keys.protectedKey), loadCachedEnvelope: async () => memory.get(keys.snapshot),
     preferredLanguage: () => 'hu', saveLanguage: () => {}, saveBackupFile: async value => { downloaded = value; },
-    fetch: async () => ({ ok: true, json: async () => ({ ...cached, data: wrongNetwork ? 'tampered' : 'valid' }) }),
+    fetch: async () => { if (networkGate) { networkGate.started(); await networkGate.pending; } return { ok: true, json: async () => ({ ...cached, data: wrongNetwork ? 'tampered' : 'valid' }) }; },
     decryptSnapshot: async envelope => { if (envelope.data !== 'valid') throw new Error('BAD_TAG'); return { generatedAt: '2026-09-10T00:00:00Z' }; },
-    window: { location: { href: 'https://example.invalid/' } }, Date, File, Error, Promise,
+    window: { location: { href: 'https://example.invalid/' } }, Date, File, Error, Promise, AbortController, setTimeout, clearTimeout,
   });
   vm.runInContext(source, context);
-  const app = vm.runInContext('useCodexPulse()', context);
+  const render = () => { stateIndex = 0; refIndex = 0; return vm.runInContext('useCodexPulse()', context); };
   // The vault ref starts empty before the real unlock path fills it.
-  await app.unlock('123456');
-  return { app, memory, raw, bundle, key, vault, initialEncrypted, getBackup: () => downloaded };
+  await render().unlock('123456');
+  return { get app() { return render(); }, memory, raw, bundle, key, vault, initialEncrypted, getBackup: () => downloaded,
+    failSave: value => { failSave = value; },
+    pauseNetwork: () => { let started; let resume; const began = new Promise(resolve => { started = resolve; }); const pending = new Promise(resolve => { resume = resolve; }); networkGate = { started, pending }; return { began, resume }; },
+  };
 }
 
 test('same-key PIN recovery preserves existing encrypted corrections', async () => {
   const h = await harness();
+  await h.app.recover(await cryptoTools.recoveryCodeFor(h.raw));
   await h.app.setupPin('654321');
   const restored = await cryptoTools.unlockMasterKey('654321', h.memory.get(keys.protectedKey));
   const vault = await cryptoTools.decryptLocalValue(h.memory.get(keys.localVault), restored.key);
@@ -78,10 +82,76 @@ test('rapid edits are serialized, encrypted backup restores, wrong key leaves va
 
 test('corrupt existing vault blocks re-pairing without overwriting key or corrections', async () => {
   const h = await harness();
+  await h.app.recover(await cryptoTools.recoveryCodeFor(h.raw));
   h.memory.set(keys.localVault, 'broken');
   const bundle = h.memory.get(keys.protectedKey);
   await assert.rejects(h.app.setupPin('654321'));
   assert.equal(h.memory.get(keys.localVault), 'broken');
   assert.equal(h.memory.get(keys.protectedKey), bundle);
   h.raw.fill(0);
+});
+
+test('locking cancels a delayed unlock and refresh, with no decrypted data restored', async () => {
+  const h = await harness();
+  const pause = h.pauseNetwork();
+  const unlocking = h.app.unlock('123456');
+  await pause.began;
+  h.app.lock();
+  pause.resume();
+  assert.equal(await unlocking, false);
+  assert.equal(h.app.phase, 'locked');
+  assert.equal(h.app.snapshot, null);
+  assert.deepEqual(h.app.vault, empty);
+  await h.app.unlock('123456');
+  const refreshPause = h.pauseNetwork();
+  const refreshing = h.app.refresh();
+  await refreshPause.began;
+  h.app.lock();
+  refreshPause.resume();
+  await refreshing;
+  assert.equal(h.app.phase, 'locked');
+  assert.equal(h.app.snapshot, null);
+  h.raw.fill(0);
+});
+
+test('failed save remains visible after refresh, exports latest edits and can retry after locking', async () => {
+  const h = await harness();
+  h.failSave(true);
+  h.app.updateVault(current => ({ ...current, projectRules: { example: { name: 'Unsaved correction' } } }));
+  await assert.rejects(h.app.prepareForUpdate());
+  assert.equal(h.app.saveStatus, 'failed');
+  await h.app.refresh();
+  assert.equal(h.app.saveStatus, 'failed');
+  await h.app.backupVault();
+  const exported = JSON.parse(h.getBackup());
+  assert.equal((await cryptoTools.decryptLocalValue(exported.data, h.key)).projectRules.example.name, 'Unsaved correction');
+  h.app.lock();
+  await h.app.unlock('123456');
+  assert.equal(h.app.vault.projectRules.example.name, 'Unsaved correction');
+  assert.equal(h.app.saveStatus, 'failed');
+  h.failSave(false);
+  await h.app.retrySave();
+  await h.app.prepareForUpdate();
+  assert.equal(h.app.saveStatus, 'saved');
+  assert.equal((await cryptoTools.decryptLocalValue(h.memory.get(keys.localVault), h.key)).projectRules.example.name, 'Unsaved correction');
+  h.raw.fill(0);
+});
+
+test('reset invalidates pending loads and corrupt vault errors do not overwrite storage', async () => {
+  const h = await harness();
+  h.memory.set(keys.localVault, 'broken');
+  await h.app.unlock('123456');
+  assert.equal(h.app.error, 'VAULT_CORRUPT');
+  assert.equal(h.memory.get(keys.localVault), 'broken');
+  const clean = await harness();
+  const pause = clean.pauseNetwork();
+  const refreshing = clean.app.refresh();
+  await pause.began;
+  await clean.app.resetDevice();
+  pause.resume();
+  await refreshing;
+  assert.equal(clean.app.phase, 'unpaired');
+  assert.equal(clean.app.snapshot, null);
+  assert.equal(clean.memory.size, 0);
+  h.raw.fill(0); clean.raw.fill(0);
 });

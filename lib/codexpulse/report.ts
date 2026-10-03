@@ -1,6 +1,7 @@
 import type { CategoryStat, MonthView, ProjectStat } from './analytics';
 import { categoryLabel } from './i18n';
 import type { Language } from './types';
+import { reportPeriod } from './report-period';
 
 export type ReportPayload = {
   language: Language;
@@ -19,11 +20,19 @@ function roundRect(context: CanvasRenderingContext2D, x: number, y: number, widt
   context.roundRect(x, y, width, height, radius);
 }
 
-function text(context: CanvasRenderingContext2D, value: string, x: number, y: number, size: number, color: string, weight = 500, align: CanvasTextAlign = 'left') {
+function text(context: CanvasRenderingContext2D, value: string, x: number, y: number, size: number, color: string, weight = 500, align: CanvasTextAlign = 'left', maxWidth?: number) {
   context.fillStyle = color;
   context.font = `${weight} ${size}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
   context.textAlign = align;
-  context.fillText(value, x, y);
+  let fitted = value;
+  if (maxWidth !== undefined) {
+    const characters = Array.from(value);
+    while (characters.length && context.measureText(fitted).width > maxWidth) {
+      characters.pop();
+      fitted = `${characters.join('')}…`;
+    }
+  }
+  context.fillText(fitted, x, y);
 }
 
 function drawMetric(context: CanvasRenderingContext2D, x: number, y: number, width: number, label: string, value: string, detail: string) {
@@ -55,7 +64,7 @@ function drawBars(context: CanvasRenderingContext2D, items: CategoryStat[], lang
 function drawProjects(context: CanvasRenderingContext2D, items: ProjectStat[], x: number, y: number, width: number) {
   items.slice(0, 5).forEach((item, index) => {
     const rowY = y + index * 50;
-    text(context, item.name, x, rowY, 18, '#aebfc8', 540);
+    text(context, item.name, x, rowY, 18, '#aebfc8', 540, 'left', width - 80);
     text(context, `${item.share.toFixed(0)}%`, x + width, rowY, 18, '#d9e7ec', 650, 'right');
   });
 }
@@ -82,6 +91,8 @@ export function renderReport(payload: ReportPayload) {
   text(context, 'CODEXPULSE', 70, 92, 22, '#52e5db', 750);
   text(context, monthLabel, 70, 174, 58, '#f0f8fb', 720);
   text(context, language === 'hu' ? 'Személyes Codex havi riport' : 'Personal Codex monthly report', 70, 220, 22, '#79909e', 500);
+  const period = reportPeriod(view, language);
+  text(context, period.status, 70, 254, 18, '#a5b8c4', 500, 'left', 1100);
   if (view.month.estimated) {
     roundRect(context, 1010, 68, 160, 48, 24);
     context.fillStyle = 'rgba(237,185,107,.13)';
@@ -93,7 +104,7 @@ export function renderReport(payload: ReportPayload) {
   const resultsIndex = view.resultsIndex === null ? '—' : `${Math.round(view.resultsIndex)}%`;
   drawMetric(context, 70, 288, 340, language === 'hu' ? 'Használati index' : 'Usage index', usageIndex, language === 'hu' ? 'személyes átlaghoz' : 'vs personal average');
   drawMetric(context, 450, 288, 340, language === 'hu' ? 'Összes token' : 'Total tokens', compact(view.month.usage.totalTokens, language), language === 'hu' ? 'cache-sel együtt' : 'including cache');
-  drawMetric(context, 830, 288, 340, language === 'hu' ? 'Eredményindex' : 'Results index', resultsIndex, `${view.outcomes.success + view.outcomes.partial * 0.5} ${language === 'hu' ? 'eredménypont' : 'outcome points'}`);
+  drawMetric(context, 830, 288, 340, language === 'hu' ? 'Eredményindex' : 'Results index', resultsIndex, `${new Intl.NumberFormat(language === 'hu' ? 'hu-HU' : 'en-US').format(view.resultPoints)} ${language === 'hu' ? 'eredménypont' : 'outcome points'}`);
 
   roundRect(context, 70, 500, 1100, 560, 30);
   context.fillStyle = '#0a1721';
@@ -139,6 +150,7 @@ export function renderReport(payload: ReportPayload) {
   text(context, language === 'hu' ? 'Eredménypont: sikeres 1 · részleges 0,5 · sikertelen/nyitott 0. A besorolás javítható becslés.' : 'Outcome points: success 1 · partial 0.5 · failed/open 0. Classification is a correctable estimate.', 70, 1628, 16, '#79909e', 500);
   text(context, generatedLabel, 70, 1668, 16, '#536b78', 500);
   text(context, language === 'hu' ? 'API-egyenértékű költség · nem ChatGPT-számla' : 'API-equivalent cost · not a ChatGPT bill', 1170, 1668, 16, '#536b78', 500, 'right');
+  text(context, period.comparison, 70, 1704, 16, '#79909e', 500, 'left', 1100);
   return canvas;
 }
 

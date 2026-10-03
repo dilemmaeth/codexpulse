@@ -11,7 +11,24 @@ export function validateVault(value: unknown): LocalVault {
     if (!record(rule) || (rule.name !== undefined && typeof rule.name !== 'string') || (rule.hidden !== undefined && typeof rule.hidden !== 'boolean') || (rule.mergeInto != null && typeof rule.mergeInto !== 'string')) throw new Error('VAULT_SCHEMA');
   }
   if (source.outcomeDates !== undefined && (!record(source.outcomeDates) || Object.values(source.outcomeDates).some((date) => !/^\d{4}-\d{2}-\d{2}$/u.test(date)))) throw new Error('VAULT_SCHEMA');
-  return { categoryOverrides: source.categoryOverrides, outcomeOverrides: source.outcomeOverrides, projectRules: source.projectRules, outcomeDates: source.outcomeDates || {}, reportIncludesProjects: source.reportIncludesProjects };
+  if (source.monthReviews !== undefined) {
+    if (!record(source.monthReviews)) throw new Error('VAULT_SCHEMA');
+    for (const [month, review] of Object.entries(source.monthReviews)) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/u.test(month) || !record(review)) throw new Error('VAULT_SCHEMA');
+      for (const field of ['achievements', 'unfinished', 'nextFocus'] as const) {
+        if (typeof review[field] !== 'string' || review[field].length > 2000) throw new Error('VAULT_SCHEMA');
+      }
+      if (review.closedAt !== null && (typeof review.closedAt !== 'string' || !Number.isFinite(Date.parse(review.closedAt)))) throw new Error('VAULT_SCHEMA');
+      if (review.closedAt !== null || review.summary !== undefined) {
+        const summary = review.summary;
+        if (!record(summary) || !summary || typeof summary.generatedAt !== 'string' || !Number.isFinite(Date.parse(summary.generatedAt))) throw new Error('VAULT_SCHEMA');
+        for (const field of ['totalTokens', 'tasks', 'activeDays', 'success', 'partial', 'failed', 'open', 'resultPoints'] as const) {
+          if (typeof summary[field] !== 'number' || !Number.isFinite(summary[field]) || summary[field] < 0) throw new Error('VAULT_SCHEMA');
+        }
+      }
+    }
+  }
+  return { categoryOverrides: source.categoryOverrides, outcomeOverrides: source.outcomeOverrides, projectRules: source.projectRules, outcomeDates: source.outcomeDates || {}, reportIncludesProjects: source.reportIncludesProjects, ...(source.monthReviews ? { monthReviews: source.monthReviews } : {}) };
 }
 
 export async function saveBackupFile(text: string) {

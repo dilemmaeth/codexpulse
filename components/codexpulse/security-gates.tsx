@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, KeyRound, LockKeyhole, QrCode, ShieldCheck } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { t } from '@/lib/codexpulse/i18n';
 import type { Language } from '@/lib/codexpulse/types';
@@ -197,10 +198,11 @@ export function LockedGate({ language, onUnlock, onRecover }: { language: Langua
   );
 }
 
-export function ErrorGate({ language, onRetry }: { language: Language; onRetry: () => void }) {
+export function ErrorGate({ language, onRetry, onReset, error }: { language: Language; onRetry: () => void; onReset: () => Promise<void>; error: string | null }) {
   return (
-    <SecurityShell icon={<ShieldCheck />} title={t(language, 'loadFailed')} body={language === 'hu' ? 'A titkosított helyi másolat sem érhető el.' : 'The encrypted local copy is unavailable too.'}>
+    <SecurityShell icon={<ShieldCheck />} title={t(language, 'loadFailed')} body={error === 'VAULT_CORRUPT' ? (language === 'hu' ? 'A helyi besorolásmentés sérült. Nem írtuk felül. Újrapárosítás után külső backupból állíthatod vissza.' : 'Local corrections are corrupted and have not been overwritten. Re-pair and restore an external backup.') : (language === 'hu' ? 'A titkosított helyi másolat sem érhető el.' : 'The encrypted local copy is unavailable too.')}>
       <Button size="lg" className="wide-button primary-action" onClick={onRetry}>{t(language, 'retry')}</Button>
+      <AlertDialog><AlertDialogTrigger render={<Button variant="outline" className="wide-button" />}>{t(language, 'reset')}</AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{t(language, 'reset')}</AlertDialogTitle><AlertDialogDescription>{language === 'hu' ? 'Ez törli az eszköz párosítását, besorolásait és havi értékeléseit. A helyreállításhoz szükséged lesz a privát QR-ra vagy CP1 kódra és a Fájlokba mentett backupra. A PC és GitHub adatai megmaradnak.' : 'This removes pairing, corrections and monthly reviews from this device. Recovery requires your private QR or CP1 code and a backup saved to Files. PC and GitHub data remain intact.'}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>{t(language, 'cancel')}</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => void onReset()}>{t(language, 'reset')}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </SecurityShell>
   );
 }

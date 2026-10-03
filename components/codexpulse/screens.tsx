@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
+import { MonthReviewPanel } from './month-review';
+import { reportPeriod } from '@/lib/codexpulse/report-period';
 import { useClock } from '@/lib/codexpulse/use-clock';
 import {
   CheckCircle2,
@@ -228,12 +230,14 @@ export function ProjectsScreen({ language, view, months, selectedMonth, onMonth 
 }
 
 
-export function AnalysisScreen({ language, view, months, selectedMonth, onMonth }: {
+export function AnalysisScreen({ language, view, months, selectedMonth, onMonth, vault, onVault }: {
   language: Language;
   view: MonthView;
   months: string[];
   selectedMonth: string;
   onMonth: (month: string) => void;
+  vault: LocalVault;
+  onVault: (updater: (current: LocalVault) => LocalVault) => void;
 }) {
   const usage = view.month.usage;
   const tokenParts = [
@@ -246,6 +250,7 @@ export function AnalysisScreen({ language, view, months, selectedMonth, onMonth 
   return (
     <div className="screen-stack">
       <MonthHeading language={language} selectedMonth={selectedMonth} months={months} onMonth={onMonth} />
+      <MonthReviewPanel key={selectedMonth} language={language} view={view} vault={vault} onVault={onVault} />
       <section className="analysis-index-grid">
         <article className="index-card"><Sparkles /><p>{t(language, 'usageIndex')}</p><strong>{percent(view.usageIndex)}</strong></article>
         <article className="index-card"><CheckCircle2 /><p>{t(language, 'resultsIndex')}</p><strong>{percent(view.resultsIndex)}</strong></article>
@@ -285,7 +290,11 @@ export function ReportScreen({ language, view, vault, onVault, months, selectedM
 }) {
   const [reportLanguage, setReportLanguage] = useState<Language>(language);
   const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  const period = reportPeriod(view, reportLanguage);
   const create = async (format: 'png' | 'pdf') => {
+    if (busy) return;
+    setBusy(true);
     setStatus('');
     try {
       await exportReport({
@@ -299,6 +308,8 @@ export function ReportScreen({ language, view, vault, onVault, months, selectedM
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
       setStatus(t(language, 'shareFailed'));
+    } finally {
+      setBusy(false);
     }
   };
   return (
@@ -310,17 +321,19 @@ export function ReportScreen({ language, view, vault, onVault, months, selectedM
         <div className="report-preview-head"><span>CODEXPULSE</span>{view.month.estimated && <EstimateBadge language={reportLanguage} />}</div>
         <h2>{monthLabel(view.month.id, reportLanguage)}</h2>
         <p>{reportLanguage === 'hu' ? 'Személyes Codex havi riport' : 'Personal Codex monthly report'}</p>
+        <p>{period.status}</p>
         <div className="report-preview-metrics">
           <div><span>{t(reportLanguage, 'usageIndex')}</span><strong>{percent(view.usageIndex)}</strong></div>
           <div><span>{t(reportLanguage, 'totalTokens')}</span><strong>{compact(view.month.usage.totalTokens, reportLanguage)}</strong></div>
           <div><span>{t(reportLanguage, 'resultsIndex')}</span><strong>{percent(view.resultsIndex)}</strong></div>
         </div>
-        <div className="report-preview-bars">{view.categories.slice(0, 5).map((item, index) => <div key={item.id}><span>{categoryLabel(reportLanguage, item.id)}</span><i><b className={`tone-${index}`} style={{ width: `${item.taskShare}%` }} /></i><strong>{item.taskShare.toFixed(0)}%</strong></div>)}</div>
+        <div className="report-preview-bars">{view.categories.slice(0, 6).map((item, index) => <div key={item.id}><span>{categoryLabel(reportLanguage, item.id)}</span><i><b className={`tone-${index}`} style={{ width: `${item.taskShare}%` }} /></i><strong>{item.taskShare.toFixed(0)}%</strong></div>)}</div>
+        <p>{period.comparison}</p>
       </section>
       <section className="panel report-controls">
         <div className="report-language-control"><span>{t(language, 'reportLanguage')}</span><Select value={reportLanguage} onValueChange={(value) => setReportLanguage(value as Language)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="hu">Magyar</SelectItem><SelectItem value="en">English</SelectItem></SelectContent></Select></div>
         <div className="report-switch"><span><strong>{t(language, 'includeProjects')}</strong><small>{vault.reportIncludesProjects ? view.projects.slice(0, 3).map((item) => item.name).join(', ') : t(language, 'privateDetailsExcluded')}</small></span><Switch aria-label={t(language, 'includeProjects')} checked={vault.reportIncludesProjects} onCheckedChange={(checked) => onVault((current) => ({ ...current, reportIncludesProjects: checked }))} /></div>
-        <div className="report-actions"><Button size="lg" onClick={() => void create('png')}><Share2 />{t(language, 'png')}</Button><Button size="lg" variant="outline" onClick={() => void create('pdf')}><Download />{t(language, 'pdf')}</Button></div>
+        <div className="report-actions"><Button size="lg" disabled={busy} onClick={() => void create('png')}><Share2 />{t(language, 'png')}</Button><Button size="lg" variant="outline" disabled={busy} onClick={() => void create('pdf')}><Download />{t(language, 'pdf')}</Button></div>
         {status && <output className="report-status">{status}</output>}
       </section>
     </div>

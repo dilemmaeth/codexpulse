@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   root: 'dashboard',
   base: './',
-  publicDir: resolve(__dirname, 'public'),
+  publicDir: resolve(import.meta.dirname, 'public'),
   plugins: [react(), {
     name: 'codexpulse-offline-manifest',
     generateBundle(_options, bundle) {
@@ -15,7 +15,7 @@ export default defineConfig({
   }],
   resolve: {
     alias: {
-      '@': resolve(__dirname, '.'),
+      '@': resolve(import.meta.dirname, '.'),
     },
   },
   css: {

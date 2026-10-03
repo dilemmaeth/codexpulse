@@ -36,7 +36,7 @@ type ModelContext = {
 export default function Home() {
   const app = useCodexPulse();
   const now = useClock();
-  const { updateAvailable, updateNow } = useServiceWorkerUpdate();
+  const { updateAvailable, updateNow, updating, updateError } = useServiceWorkerUpdate(app.prepareForUpdate);
   const [activeTab, setActiveTab] = useState('month');
   const months = useMemo(
     () => app.snapshot ? [...app.snapshot.months].map((item) => item.id).sort().reverse() : [],
@@ -53,7 +53,7 @@ export default function Home() {
 
   useEffect(() => {
     const context = (document as Document & { modelContext?: ModelContext }).modelContext;
-    if (!context?.registerTool || !view) return;
+    if (!context?.registerTool || !view || app.phase !== 'ready') return;
     const lifecycle = new AbortController();
     const register = async () => {
       await context.registerTool({
@@ -64,7 +64,9 @@ export default function Home() {
           : 'Returns sanitized aggregate metrics for the selected month.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: true, untrustedContentHint: false },
-        execute: () => ({
+        execute: () => {
+          if (lifecycle.signal.aborted) throw new Error('LOCKED');
+          return ({
           month: view.month.id,
           totalTokens: view.month.usage.totalTokens,
           tasks: view.tasks.length,
@@ -72,7 +74,8 @@ export default function Home() {
           usageIndex: view.usageIndex,
           resultsIndex: view.resultsIndex,
           estimated: view.month.estimated,
-        }),
+          });
+        },
       }, { signal: lifecycle.signal });
       await context.registerTool({
         name: 'open_codexpulse_view',
@@ -86,6 +89,7 @@ export default function Home() {
         },
         annotations: { readOnlyHint: false, untrustedContentHint: false },
         execute: (input) => {
+          if (lifecycle.signal.aborted) throw new Error('LOCKED');
           const candidate = (input as { view?: string })?.view;
           if (!navigation.some((item) => item.value === candidate)) throw new Error('INVALID_VIEW');
           setActiveTab(candidate!);
@@ -95,14 +99,14 @@ export default function Home() {
     };
     void register().catch(() => undefined);
     return () => lifecycle.abort();
-  }, [app.language, view]);
+  }, [app.language, app.phase, view]);
 
   if (app.phase === 'booting') return <main className="boot-screen"><span className="pulse-loader" /><strong>CodexPulse</strong></main>;
   if (app.phase === 'unpaired') return <UnpairedGate language={app.language} onDemo={app.enterDemo} onRecover={app.recover} />;
   if (app.phase === 'pairing') return <PinSetupGate language={app.language} onSetup={app.setupPin} />;
   if (app.phase === 'recovery' && app.recoveryCode) return <RecoveryGate language={app.language} code={app.recoveryCode} onFinish={app.finishRecovery} />;
   if (app.phase === 'locked') return <LockedGate language={app.language} onUnlock={app.unlock} onRecover={app.recover} />;
-  if (app.phase === 'error' || !app.snapshot || !view) return <ErrorGate language={app.language} onRetry={() => window.location.reload()} />;
+  if (app.phase === 'error' || !app.snapshot || !view) return <ErrorGate language={app.language} error={app.error} onReset={app.resetDevice} onRetry={() => window.location.reload()} />;
 
   return (
     <main className="app-shell">
@@ -129,13 +133,16 @@ export default function Home() {
               />
             </div>
           </header>
-          {updateAvailable && <aside className="update-banner"><span><RefreshCw />{t(app.language, 'updateAvailable')}</span><Button size="sm" onClick={updateNow}>{t(app.language, 'updateNow')}</Button></aside>}
+          {updateAvailable && <aside className="update-banner"><span><RefreshCw />{t(app.language, 'updateAvailable')}</span><Button size="sm" disabled={updating} onClick={() => void updateNow()}>{t(app.language, 'updateNow')}</Button></aside>}
+          {updateError && <aside className="quality-note" role="alert">{app.language === 'hu' ? 'Frissítés előtt mentsd a módosításokat. Próbáld újra a mentést, vagy exportálj titkosított backupot.' : 'Save your changes before updating. Retry saving or export an encrypted backup.'}</aside>}
           {app.demo && <aside className="demo-banner"><Sparkles />{t(app.language, 'demoBanner')}</aside>}
-          {app.error && <aside className="quality-note" role="alert">{app.language === 'hu' ? 'Az adatbetöltés vagy mentés nem sikerült. A legutóbbi módosítás még nincs biztonságban: próbáld újra, vagy készíts titkosított mentést.' : 'Loading or saving failed. The latest changes may not be saved: retry or export an encrypted backup.'}</aside>}
+          {app.error && <aside className="quality-note" role="alert">{app.language === 'hu' ? 'Az adatfrissítés nem sikerült. A korábban betöltött adatok láthatók.' : 'Refresh failed. Previously loaded data is shown.'}</aside>}
+          {app.saveStatus === 'failed' && <aside className="quality-note save-warning" role="alert"><span>{app.language === 'hu' ? 'A módosítások még nincsenek elmentve. Próbáld újra, vagy exportálj titkosított mentést.' : 'Changes are not saved yet. Retry or export an encrypted backup.'}</span><Button variant="outline" size="sm" onClick={() => void app.retrySave().catch(() => undefined)}>{app.language === 'hu' ? 'Mentés újra' : 'Retry saving'}</Button></aside>}
+          {app.saveStatus === 'saving' && <output className="saving-indicator">{app.language === 'hu' ? 'Módosítások mentése…' : 'Saving changes…'}</output>}
           <TabsContent value="month" className="screen-content"><MonthScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} rateLimits={app.snapshot.rateLimits} /></TabsContent>
           <TabsContent value="projects" className="screen-content"><ProjectsScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} /></TabsContent>
           <TabsContent value="activity" className="screen-content"><ActivityScreen key={activeMonth} language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} vault={app.vault} onVault={app.updateVault} /></TabsContent>
-          <TabsContent value="analysis" className="screen-content"><AnalysisScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} /></TabsContent>
+          <TabsContent value="analysis" className="screen-content"><AnalysisScreen language={app.language} view={view} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} vault={app.vault} onVault={app.updateVault} /></TabsContent>
           <TabsContent value="report" className="screen-content"><ReportScreen language={app.language} view={view} vault={app.vault} onVault={app.updateVault} months={months} selectedMonth={activeMonth} onMonth={setSelectedMonth} /></TabsContent>
           <TabsList className="bottom-navigation" aria-label={app.language === 'hu' ? 'Fő navigáció' : 'Main navigation'}>
             {navigation.map((item) => <TabsTrigger value={item.value} key={item.value} className="nav-item"><item.icon /><span>{t(app.language, item.key)}</span></TabsTrigger>)}

@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-@import 'shadcn/tailwind.css';
+@import './ui-variants.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -476,3 +476,11 @@ h1, h2, p { margin-top: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+.review-field { display: grid; gap: 8px; margin-top: 16px; color: var(--muted-foreground); font-size: 14px; }
+.review-field textarea { width: 100%; min-height: 88px; resize: vertical; border: 1px solid var(--input); border-radius: 12px; background: #071018; color: var(--foreground); padding: 12px; font: inherit; font-size: 16px; line-height: 1.5; }
+.review-field textarea:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
+.review-field textarea[readonly] { opacity: .8; }
+.month-review-panel > button, .month-review-panel > [data-slot="alert-dialog-trigger"] { margin-top: 16px; min-height: 44px; max-width: 100%; white-space: normal; }
+.save-warning { flex-wrap: wrap; }
+.saving-indicator { display: block; padding: 8px 20px; color: var(--muted-foreground); font-size: 12px; }

@@ -110,6 +110,25 @@ export type LocalVault = {
   outcomeDates?: Record<string, string>;
   projectRules: Record<string, ProjectRule>;
   reportIncludesProjects: boolean;
+  monthReviews?: Record<string, MonthReview>;
+};
+
+export type MonthReview = {
+  achievements: string;
+  unfinished: string;
+  nextFocus: string;
+  closedAt: string | null;
+  summary?: {
+    generatedAt: string;
+    totalTokens: number;
+    tasks: number;
+    activeDays: number;
+    success: number;
+    partial: number;
+    failed: number;
+    open: number;
+    resultPoints: number;
+  };
 };
 
 export type ProtectedKeyBundle = {

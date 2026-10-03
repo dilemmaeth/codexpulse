@@ -2,7 +2,7 @@
 
 CodexPulse is a private, installable iPhone dashboard for reviewing local Codex usage, focus and outcomes. The interface is available in Hungarian and English.
 
-## What v1 includes
+## What v1.3 includes
 
 - Monthly token totals, active days, tasks and personal usage/results indices
 - Touch-friendly month selection on every main view, including reports
@@ -11,6 +11,7 @@ CodexPulse is a private, installable iPhone dashboard for reviewing local Codex 
 - Project, category, daily activity, model and outcome breakdowns
 - Five editable categories: Development, Research, Planning, Testing and Documentation
 - Local task category/outcome corrections and project rename/hide/merge rules
+- Private monthly reviews with achievements, unfinished work and next-month focus; closing captures fixed aggregate metrics and reopening preserves notes
 - Sanitized monthly PNG/PDF reports with project names hidden by default
 - July and August 2026 estimates kept as separate months
 - Installable offline PWA with a safe update prompt
@@ -45,9 +46,13 @@ The CP1 recovery code restores the data key, not a copy of device-local correcti
 
 Writes are serialized and resolve after IndexedDB transaction completion. Downloaded snapshots are authenticated before replacing the last valid offline copy. Browser/site-data deletion can still remove local data, so a saved backup is necessary for disaster recovery.
 
+Monthly reviews are part of the same encrypted vault and backup. They never enter the public snapshot or shared PNG/PDF reports. A review can close after month end once a snapshot from a later month is available. Closing freezes the metrics; reopening explicitly captures new metrics on the next closure. Historical estimates remain estimates.
+
+A failed local write stays visible independently of snapshot refreshes. Retry saves the latest changes; exporting a backup remains available even after a failed write. Pending encrypted changes survive locking within the current page session, but closing the page before a successful retry or backup can lose them. App updates require an explicit click and completed local saves. Locking cancels pending unlock/refresh results; five minutes in the background locks the app.
+
 ## Regression checks
 
-Run `npm test`, `npm run typecheck`, `npm run lint`, `npm audit`, and `npm run build:pages`. The Pages workflow runs tests and scoped lint before deployment. The service worker precaches the generated JS/CSS asset manifest and deletes only older CodexPulse caches.
+Run `npm test`, `npm run typecheck`, `npm run lint`, `npm audit`, and `npm run build:pages`. The Pages workflow runs those checks before deployment. The service worker keeps installed HTML with its matching precached JS/CSS until an accepted update and deletes only older CodexPulse caches.
 
 The publisher records success only after a successful Pages run. Failed uploads or deployments are retried on the next scheduled run even if collection is unchanged. Unchanged successful publications need no network call.
 
@@ -63,6 +68,17 @@ PowerShell can run npm through Node directly even when `npm.ps1` is blocked:
 ```
 
 The static deployment artifact is written to `dist/codexpulse`.
+
+Use `npm.cmd run dev` for the static Vite development server, or `npm.cmd run start` to preview the production build. No Next.js, Vinext or Cloudflare runtime is required.
+
+### Physical iPhone acceptance checks
+
+1. Export the encrypted vault to Files before testing. Keep the private QR/recovery code separately.
+2. Accept the update and verify Settings shows v1.3. Edit a monthly draft, wait for saving to finish, lock/unlock and check the notes.
+3. Enable airplane mode, reopen the installed PWA and unlock. Check cached data and the saved monthly review. Return online afterward.
+4. Export Hungarian and English PNG/PDF reports to Files, open each and check the cutoff/comparison labels. Private review notes must be absent.
+5. Import the exported backup only after preserving any newer edits; import replaces corrections and monthly reviews. Confirm notes and frozen metrics survived.
+6. Leave the app in the background for more than five minutes and verify it returns locked. These steps require the actual device; desktop emulation does not certify Safari/PWA behavior.
 
 ## GitHub Pages and automatic sync
 
