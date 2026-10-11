@@ -18,6 +18,7 @@ CodexPulse is a private, installable iPhone dashboard for reviewing local Codex 
 - July and August 2026 estimates kept as separate months
 - Installable offline PWA with a safe update prompt
 - Subtle view/card entrances, touch feedback and dialog transitions; decorative motion respects the device's reduced-motion preference (v1.3.1)
+- Graphite canvas, separated slate surfaces and coordinated violet/blue/mint accents (v1.5.1). Fine static grids and corner dot patterns share the same palette across overview, panels, report preview, security and settings; decorative layers stay behind content and never intercept interaction
 - QR pairing, a 6-digit PIN and a checksum-protected recovery code
 - Recovery from the locked screen without discarding same-key corrections
 - Encrypted correction backups (save to Files and restore on a paired device)
