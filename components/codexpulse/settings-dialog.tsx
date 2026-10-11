@@ -55,7 +55,7 @@ export function SettingsDialog({ language, snapshot, vault, demo, refreshing, of
       <DialogContent className="settings-dialog" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{t(language, 'settings')}</DialogTitle>
-          <DialogDescription>CodexPulse v1.4.0</DialogDescription>
+          <DialogDescription>CodexPulse v1.5.0</DialogDescription>
         </DialogHeader>
         <div className="settings-scroll">
           <section className="settings-section">

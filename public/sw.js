@@ -1,4 +1,4 @@
-const CACHE_NAME = 'codexpulse-shell-v1.4.0';
+const CACHE_NAME = 'codexpulse-shell-v1.5.0';
 const ROOT = new URL('./', self.registration.scope).href;
 const CORE = [
   ROOT,

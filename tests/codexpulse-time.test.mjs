@@ -21,7 +21,8 @@ test('union counts parallel chats and duplicates once, keeping idle gaps out', (
     turn('2026-09-01T09:00:00Z', '2026-09-01T09:05:00Z'),
   ]).get('2026-09');
   assert.equal(time.activeMs, 20 * minute);
-  assert.deepEqual(time.days, [{ date: '2026-09-01', activeMs: 20 * minute }]);
+  const hourlyMs = Array(24).fill(0); hourlyMs[10] = 15 * minute; hourlyMs[11] = 5 * minute;
+  assert.deepEqual(time.days, [{ date: '2026-09-01', activeMs: 20 * minute, hourlyMs }]);
 });
 
 test('spawn edges, orphan subagents, guardians and unknown thread IDs add no time', () => {
@@ -46,8 +47,10 @@ test('month crossing is split at Budapest midnight, without assigning all time t
 test('Budapest DST days have 23 and 25 recorded hours, preserving total elapsed time', () => {
   const spring = estimate([turn('2026-03-28T23:00:00Z', '2026-03-29T22:00:00Z')]).get('2026-03');
   const autumn = estimate([turn('2026-10-24T22:00:00Z', '2026-10-25T23:00:00Z')]).get('2026-10');
-  assert.deepEqual(spring.days, [{ date: '2026-03-29', activeMs: 23 * 60 * minute }]);
-  assert.deepEqual(autumn.days, [{ date: '2026-10-25', activeMs: 25 * 60 * minute }]);
+  const springHours = Array(24).fill(60 * minute); springHours[2] = 0;
+  const autumnHours = Array(24).fill(60 * minute); autumnHours[2] = 120 * minute;
+  assert.deepEqual(spring.days, [{ date: '2026-03-29', activeMs: 23 * 60 * minute, hourlyMs: springHours }]);
+  assert.deepEqual(autumn.days, [{ date: '2026-10-25', activeMs: 25 * 60 * minute, hourlyMs: autumnHours }]);
 });
 
 test('recorded duration bounds restart/suspend wall time; missing completion uses terminal duration', () => {
@@ -120,5 +123,16 @@ test('collector integration adds aggregate time without changing token totals or
   assert.equal(timed[1].usage.totalTokens, 0);
   assert.equal(timed[1].timeEstimate.activeMs, 10 * minute);
   assert.deepEqual(Object.keys(timed[1].timeEstimate).sort(), ['activeMs', 'days', 'method', 'recordedTurns', 'skippedTurns']);
-  assert.deepEqual(Object.keys(timed[1].timeEstimate.days[0]).sort(), ['activeMs', 'date']);
+  assert.deepEqual(Object.keys(timed[1].timeEstimate.days[0]).sort(), ['activeMs', 'date', 'hourlyMs']);
+});
+
+test('hourly buckets split at the clock boundary and retain the union total', () => {
+  const time = estimate([
+    turn('2026-09-01T08:50:00Z', '2026-09-01T09:20:00Z'),
+    turn('2026-09-01T09:10:00Z', '2026-09-01T09:30:00Z', { thread_id: 'other' }),
+  ]).get('2026-09');
+  const hours = time.days[0].hourlyMs;
+  assert.equal(hours[10], 10 * minute);
+  assert.equal(hours[11], 30 * minute);
+  assert.equal(hours.reduce((sum, ms) => sum + ms, 0), time.activeMs);
 });

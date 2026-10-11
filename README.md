@@ -2,10 +2,11 @@
 
 CodexPulse is a private, installable iPhone dashboard for reviewing local Codex usage, focus and outcomes. The interface is available in Hungarian and English.
 
-## What v1.4 includes
+## What v1.5 includes
 
 - Monthly token totals, active days, tasks and personal usage/results indices
 - Estimated monthly Codex time and average per recorded day, without double-counting simultaneous conversations
+- Screen Time-style day/week/month navigation, hourly detail, tappable daily charts/calendar and monthly history bars, available offline from the authenticated snapshot
 - Touch-friendly month selection on every main view, including reports
 - Accent-insensitive task search with combined project/category filters and a clear/reset action
 - Local Hungarian/English monthly summaries of focus, estimated project usage and period-matched changes (no AI service or API calls)
@@ -39,6 +40,7 @@ The six-digit PIN and in-app retry delays are a convenient device lock, not a su
 - Results index uses success = 1, partial = 0.5, failed/open = 0, compared with matching elapsed periods in previous months. Automatic outcomes are heuristics; corrections record the selected month.
 - New event token fields come from the logs. Their API cost uses the frozen baseline's average cost per token, not current model-specific pricing. Days containing this estimate are marked estimated.
 - Monthly Codex time is the union of recorded terminal root-turn intervals across all chats. It includes waiting for responses and background work; it does not measure human attention, typing, reading or screen time. Gaps between turns, subagents (including guardian reviews) and unfinished turns are excluded. Positive recorded durations bound elapsed wall time when both are available. Failed/interrupted turns with usable timestamps still count. Daily/monthly boundaries use Europe/Budapest, including DST. Only monthly totals, daily totals and coverage counts enter the encrypted snapshot; the estimator adds no raw text or turn timestamps. Incomplete historical indexes can undercount usage. Older snapshots show unavailable time instead of deriving a misleading total from task durations.
+- Hourly details are optional arrays of 24 aggregate durations per day, reconstructed from existing local turn timestamps on sync. A repeated Budapest DST hour combines both occurrences; the skipped spring hour stays zero. The charts distinguish missing data from no recorded runs and from future dates. Daily chart averages include elapsed days with available time data, including zero-time days; future and unavailable days are excluded. Old positive daily totals remain usable without inventing hourly distributions. Retrospective coverage depends on retained local history; the UI does not certify source completeness.
 - The displayed USD amount is an API-price equivalent estimate, not a ChatGPT invoice or credit balance.
 - Quotas are timestamped observations, not live account limits. Expired windows are not displayed as current percentages.
 
@@ -76,11 +78,12 @@ Use `npm.cmd run dev` for the static Vite development server, or `npm.cmd run st
 ### Physical iPhone acceptance checks
 
 1. Export the encrypted vault to Files before testing. Keep the private QR/recovery code separately.
-2. Accept the update and verify Settings shows v1.3. Edit a monthly draft, wait for saving to finish, lock/unlock and check the notes.
+2. Accept the update and verify Settings shows v1.5. Edit a monthly draft, wait for saving to finish, lock/unlock and check the notes.
 3. Enable airplane mode, reopen the installed PWA and unlock. Check cached data and the saved monthly review. Return online afterward.
 4. Export Hungarian and English PNG/PDF reports to Files, open each and check the cutoff/comparison labels. Private review notes must be absent.
 5. Import the exported backup only after preserving any newer edits; import replaces corrections and monthly reviews. Confirm notes and frozen metrics survived.
 6. Leave the app in the background for more than five minutes and verify it returns locked. These steps require the actual device; desktop emulation does not certify Safari/PWA behavior.
+7. Refresh the encrypted data, switch the time card between Day/Week/Month, tap a recorded day for its hourly chart, and browse a prior month. Check that future days are disabled and missing time is not shown as zero. Repeat the chart navigation offline with the latest cached snapshot.
 
 ## GitHub Pages and automatic sync
 

@@ -2,6 +2,7 @@ import { usageDay } from './codexpulse-ledger.mjs';
 
 const DAY = 86_400_000;
 const TERMINAL = new Set(['completed', 'interrupted', 'failed']);
+const hourLabel = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Budapest', hour: '2-digit', hourCycle: 'h23' });
 
 function timestamp(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -75,13 +76,22 @@ export function buildTimeEstimates({ threads, edges, turns }, generatedAt) {
       const until = Math.min(end, nextMidnight(cursor));
       const month = ensure(date), elapsed = until - cursor;
       month.activeMs += elapsed;
-      month.days.set(date, (month.days.get(date) || 0) + elapsed);
+      const day = month.days.get(date) || { date, activeMs: 0, hourlyMs: Array(24).fill(0) };
+      day.activeMs += elapsed;
+      // Budapest offsets and DST changes fall on UTC hour boundaries.
+      // A repeated local hour is combined in its one displayed slot.
+      for (let hourStart = cursor; hourStart < until;) {
+        const hourEnd = Math.min(until, (Math.floor(hourStart / 3_600_000) + 1) * 3_600_000);
+        day.hourlyMs[Number(hourLabel.format(new Date(hourStart)))] += hourEnd - hourStart;
+        hourStart = hourEnd;
+      }
+      month.days.set(date, day);
       cursor = until;
     }
   }
   return new Map([...months].map(([id, month]) => [id, {
     ...month,
-    days: [...month.days].map(([date, activeMs]) => ({ date, activeMs })).sort((a, b) => a.date.localeCompare(b.date)),
+    days: [...month.days.values()].sort((a, b) => a.date.localeCompare(b.date)),
   }]));
 }
 

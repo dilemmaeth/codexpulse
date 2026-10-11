@@ -45,7 +45,7 @@ export type MonthRecord = {
     activeMs: number;
     recordedTurns: number;
     skippedTurns: number;
-    days: { date: string; activeMs: number }[];
+    days: { date: string; activeMs: number; hourlyMs?: number[] }[];
   };
 };
 

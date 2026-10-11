@@ -84,6 +84,10 @@ async function main() {
     for (const day of time.days) {
       assert(/^\d{4}-\d{2}-\d{2}$/u.test(day.date) && day.date.startsWith(`${month.id}-`) && !dates.has(day.date), 'Érvénytelen vagy ismételt időadat-nap.');
       assert(Number.isFinite(day.activeMs) && day.activeMs > 0 && day.activeMs <= MAX_DAILY_TIME_MS, 'Érvénytelen napi időbecslés.');
+      if (day.hourlyMs !== undefined) {
+        assert(Array.isArray(day.hourlyMs) && day.hourlyMs.length === 24 && day.hourlyMs.every(value => Number.isFinite(value) && value >= 0 && value <= 7_200_000), 'Érvénytelen órás időbecslés.');
+        assert(Math.abs(day.activeMs - day.hourlyMs.reduce((sum, value) => sum + value, 0)) < 1, 'Az órás és napi időbecslés eltér.');
+      }
       dates.add(day.date);
     }
     assert(Math.abs(time.activeMs - time.days.reduce((sum, day) => sum + day.activeMs, 0)) < 1, 'A napi és havi időbecslés eltér.');

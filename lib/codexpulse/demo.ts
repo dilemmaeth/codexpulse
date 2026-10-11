@@ -101,7 +101,12 @@ export const DEMO_SNAPSHOT: CodexPulseSnapshot = {
       // Synthetic demo timing, unrelated to the task-duration sum.
       timeEstimate: {
         method: 'root-turn-union-v1', activeMs: 27_000_000, recordedTurns: 47, skippedTurns: 1,
-        days: septemberDays.map((day) => ({ date: day.date, activeMs: 3_375_000 })),
+        days: septemberDays.map((day, index) => {
+          const activeMs = [45, 70, 30, 110, 55, 40, 65, 35][index] * 60_000;
+          const hourlyMs = Array<number>(24).fill(0);
+          for (const [hour, share] of [[8, 0.2], [10, 0.35], [14, 0.3], [18, 0.15]]) hourlyMs[hour] = activeMs * share;
+          return { date: day.date, activeMs, hourlyMs };
+        }),
       },
       models: [
         { model: 'gpt-5.6-sol', tokens: 196_400_000 },
