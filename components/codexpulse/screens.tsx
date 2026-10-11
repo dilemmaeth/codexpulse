@@ -6,6 +6,7 @@ import { reportPeriod } from '@/lib/codexpulse/report-period';
 import { useClock } from '@/lib/codexpulse/use-clock';
 import {
   CheckCircle2,
+  Clock3,
   Download,
   FileText,
   FolderKanban,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/codexpulse/analytics';
 import { categoryLabel, outcomeLabel, t } from '@/lib/codexpulse/i18n';
 import { exportReport } from '@/lib/codexpulse/report';
+import { formatCodexTime, monthTimeSummary } from '@/lib/codexpulse/time';
 import type {
   CodexPulseSnapshot,
   Language,
@@ -89,6 +91,19 @@ export function MonthHeading({ language, selectedMonth, months, onMonth }: {
   );
 }
 
+function CodexTime({ language, view }: { language: Language; view: MonthView }) {
+  const hu = language === 'hu', time = monthTimeSummary(view.month);
+  return <section className="panel codex-time" aria-label={hu ? 'Becsült Codex-idő' : 'Estimated Codex time'}>
+    <div className="panel-heading"><h2><Clock3 aria-hidden="true" />{hu ? 'Becsült Codex-idő' : 'Estimated Codex time'}</h2><EstimateBadge language={language} /></div>
+    <strong className="time-total">{formatCodexTime(time?.activeMs ?? null, language)}</strong>
+    {time ? <>
+      <p>{hu ? `${time.activeDays} rögzített napon · napi átlag ` : `Across ${time.activeDays} recorded days · daily average `}<strong>{formatCodexTime(time.dailyAverageMs, language)}</strong></p>
+      <small>{hu ? 'A rögzített fordulók futási ideje, a válaszokra várakozással együtt. A párhuzamos beszélgetések egyszer számítanak; a fordulók közti szünetek és a subagentek külön ideje kimarad. Nem méri a képernyő előtt töltött időt; háttérben futó munka is beleszámíthat.' : 'Recorded turn runtime, including time waiting for replies. Simultaneous chats count once; gaps between turns and separate subagent runtime are excluded. This does not measure screen time; background work may be included.'}</small>
+      {time.skippedTurns > 0 && <small className="time-coverage">{hu ? `${time.skippedTurns} futó vagy hiányos forduló kimaradt a becslésből.` : `${time.skippedTurns} running or incomplete turns were omitted from this estimate.`}</small>}
+    </> : <p>{hu ? 'Ehhez a hónaphoz még nincs használható időadat. Frissített szinkronadatokból jelenhet meg; a régebbi napló hiányos lehet.' : 'No usable time data for this month yet. Updated sync data may provide it; older history can be incomplete.'}</p>}
+  </section>;
+}
+
 function MonthlySummary({ language, view }: { language: Language; view: MonthView }) {
   const hu = language === 'hu';
   const highlights = monthlyHighlights(view);
@@ -150,6 +165,7 @@ export function MonthScreen({ language, view, months, selectedMonth, onMonth, ra
         <Metric label={t(language, 'tasks')} value={integer(view.tasks.length, language)} detail={`${view.projects.length} ${t(language, 'projectsCount')}`} />
         <Metric label={t(language, 'activeDays')} value={integer(view.month.days.filter((day) => day.totalTokens > 0).length, language)} detail={`${view.totalTurns} ${t(language, 'turns').toLowerCase()}`} />
       </section>
+      <CodexTime language={language} view={view} />
       <MonthlySummary language={language} view={view} />
       <section className="panel category-panel">
         <div className="panel-heading">

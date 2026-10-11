@@ -143,6 +143,13 @@ h1, h2, p { margin-top: 0; }
 .metric-card strong { display: block; color: #eef8fb; font-family: var(--font-mono); font-size: clamp(1.15rem, 5.5vw, 1.55rem); letter-spacing: -0.06em; }
 .metric-card span { display: block; margin-top: 0.35rem; color: #526775; font-size: 0.64rem; line-height: 1.35; }
 .panel { margin-top: 0.75rem; padding: 1rem; border-radius: 1.1rem; }
+.codex-time h2 { display: flex; align-items: center; gap: 0.5rem; }
+.codex-time h2 svg { width: 1rem; height: 1rem; color: #4cdcd6; flex: none; }
+.codex-time .panel-heading { align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.time-total { display: block; margin: 0.8rem 0 0.45rem; color: #eef8fb; font-family: var(--font-mono); font-size: clamp(1.4rem, 6vw, 1.9rem); letter-spacing: -0.05em; }
+.codex-time p { color: #9eafbb; font-size: 0.75rem; line-height: 1.5; }
+.codex-time small { display: block; color: #8194a3; font-size: 0.68rem; line-height: 1.6; }
+.codex-time .time-coverage { margin-top: 0.45rem; color: #d6b277; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .panel-heading h2 { margin-bottom: 0; color: #e9f2f7; font-size: 1rem; font-weight: 650; letter-spacing: -0.025em; }
 .panel-meta { flex: none; padding: 0.3rem 0.45rem; border-radius: 0.45rem; color: #607785; background: rgba(255, 255, 255, 0.025); font-family: var(--font-mono); font-size: 0.6rem; }

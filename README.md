@@ -2,9 +2,10 @@
 
 CodexPulse is a private, installable iPhone dashboard for reviewing local Codex usage, focus and outcomes. The interface is available in Hungarian and English.
 
-## What v1.3 includes
+## What v1.4 includes
 
 - Monthly token totals, active days, tasks and personal usage/results indices
+- Estimated monthly Codex time and average per recorded day, without double-counting simultaneous conversations
 - Touch-friendly month selection on every main view, including reports
 - Accent-insensitive task search with combined project/category filters and a clear/reset action
 - Local Hungarian/English monthly summaries of focus, estimated project usage and period-matched changes (no AI service or API calls)
@@ -37,7 +38,7 @@ The six-digit PIN and in-app retry delays are a convenient device lock, not a su
 - July and August remain separate estimates. Initial per-task month allocations are estimates frozen at migration; new observed tokens are appended to their event month. Task/project/category estimates use the same unscaled basis, separate from monthly log totals.
 - Results index uses success = 1, partial = 0.5, failed/open = 0, compared with matching elapsed periods in previous months. Automatic outcomes are heuristics; corrections record the selected month.
 - New event token fields come from the logs. Their API cost uses the frozen baseline's average cost per token, not current model-specific pricing. Days containing this estimate are marked estimated.
-- Activity duration is a recorded Codex activity period, not a claim about human work hours.
+- Monthly Codex time is the union of recorded terminal root-turn intervals across all chats. It includes waiting for responses and background work; it does not measure human attention, typing, reading or screen time. Gaps between turns, subagents (including guardian reviews) and unfinished turns are excluded. Positive recorded durations bound elapsed wall time when both are available. Failed/interrupted turns with usable timestamps still count. Daily/monthly boundaries use Europe/Budapest, including DST. Only monthly totals, daily totals and coverage counts enter the encrypted snapshot; the estimator adds no raw text or turn timestamps. Incomplete historical indexes can undercount usage. Older snapshots show unavailable time instead of deriving a misleading total from task durations.
 - The displayed USD amount is an API-price equivalent estimate, not a ChatGPT invoice or credit balance.
 - Quotas are timestamped observations, not live account limits. Expired windows are not displayed as current percentages.
 

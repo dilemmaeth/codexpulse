@@ -98,6 +98,11 @@ export const DEMO_SNAPSHOT: CodexPulseSnapshot = {
       id: '2026-09',
       usage: emptyParts(286_400_000, 31.8),
       days: septemberDays,
+      // Synthetic demo timing, unrelated to the task-duration sum.
+      timeEstimate: {
+        method: 'root-turn-union-v1', activeMs: 27_000_000, recordedTurns: 47, skippedTurns: 1,
+        days: septemberDays.map((day) => ({ date: day.date, activeMs: 3_375_000 })),
+      },
       models: [
         { model: 'gpt-5.6-sol', tokens: 196_400_000 },
         { model: 'gpt-6-astra', tokens: 90_000_000 },

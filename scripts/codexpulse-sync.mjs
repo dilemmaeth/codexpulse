@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { updateEventLedger, usageDay } from './codexpulse-ledger.mjs';
 import { withLock } from './codexpulse-lock.mjs';
+import { buildTimeEstimates } from './codexpulse-time.mjs';
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PRIVATE_ROOT = join(PROJECT_ROOT, '.codexpulse', 'private');
@@ -184,7 +185,7 @@ function readDatabases() {
   try {
     const threads = state.prepare(`
       SELECT id, rollout_path, created_at, updated_at, created_at_ms, updated_at_ms,
-             cwd, title, tokens_used, first_user_message, preview, model, project_id
+             cwd, title, tokens_used, first_user_message, preview, model, project_id, source, thread_source
       FROM threads
     `).all();
     const projects = state.prepare('SELECT id, name FROM projects').all();
@@ -419,7 +420,7 @@ function estimatedUsage(totalTokens, usageCache) {
 }
 
 
-function buildMonths(tasks, usageCache, incrementalLedger) {
+function buildMonths(tasks, usageCache, incrementalLedger, timeEstimates) {
   const monthMap = new Map();
   const ensureMonth = (id) => {
     if (!monthMap.has(id)) monthMap.set(id, {
@@ -511,6 +512,7 @@ function buildMonths(tasks, usageCache, incrementalLedger) {
     }
   }
 
+  for (const id of timeEstimates.keys()) ensureMonth(id);
   return [...monthMap.values()].map((month) => ({
     id: month.id,
     usage: month.usage,
@@ -518,6 +520,7 @@ function buildMonths(tasks, usageCache, incrementalLedger) {
     models: [...month.models.entries()].map(([model, tokens]) => ({ model, tokens })).sort((left, right) => right.tokens - left.tokens),
     estimated: month.estimated,
     estimateReasons: [...new Set(month.estimateReasons)],
+    ...(timeEstimates.has(month.id) ? { timeEstimate: timeEstimates.get(month.id) } : {}),
   })).sort((left, right) => left.id.localeCompare(right.id));
 }
 
@@ -539,7 +542,7 @@ function buildSnapshot(config) {
     generatedAt,
     source: 'codexpulse-local',
     exactFrom: EXACT_FROM,
-    months: buildMonths(internalTasks, usageCache, incrementalLedger),
+    months: buildMonths(internalTasks, usageCache, incrementalLedger, buildTimeEstimates(database, generatedAt)),
     tasks: internalTasks.map(({ _latestModel, _turns, _rolloutPaths, ...task }) => task),
     rateLimits: latestRateLimits(internalTasks),
     diagnostics: {
@@ -589,6 +592,7 @@ async function inputSignature() {
     USAGE_CACHE,
     fileURLToPath(import.meta.url),
     join(PROJECT_ROOT, 'scripts', 'codexpulse-ledger.mjs'),
+    join(PROJECT_ROOT, 'scripts', 'codexpulse-time.mjs'),
   ];
   const details = await Promise.all(files.map(fileFingerprint));
   return createHash('sha256').update(details.join('|')).digest('hex');

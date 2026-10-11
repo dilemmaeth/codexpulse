@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MAX_DAILY_TIME_MS } from './codexpulse-time.mjs';
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PRIVATE_ROOT = join(PROJECT_ROOT, '.codexpulse', 'private');
@@ -73,6 +74,20 @@ async function main() {
   assert(envelope.keyId === createHash('sha256').update(key).digest().subarray(0, 9).toString('base64url'), 'A kulcsazonosító eltér.');
 
   const snapshot = decrypt(envelope, key);
+  for (const month of snapshot.months) {
+    const time = month.timeEstimate;
+    if (!time) continue; // Older snapshots remain compatible.
+    assert(time.method === 'root-turn-union-v1', 'Ismeretlen időbecslés.');
+    assert(Number.isFinite(time.activeMs) && time.activeMs >= 0, 'Érvénytelen havi időbecslés.');
+    assert([time.recordedTurns, time.skippedTurns].every(value => Number.isInteger(value) && value >= 0), 'Érvénytelen időadat-lefedettség.');
+    const dates = new Set();
+    for (const day of time.days) {
+      assert(/^\d{4}-\d{2}-\d{2}$/u.test(day.date) && day.date.startsWith(`${month.id}-`) && !dates.has(day.date), 'Érvénytelen vagy ismételt időadat-nap.');
+      assert(Number.isFinite(day.activeMs) && day.activeMs > 0 && day.activeMs <= MAX_DAILY_TIME_MS, 'Érvénytelen napi időbecslés.');
+      dates.add(day.date);
+    }
+    assert(Math.abs(time.activeMs - time.days.reduce((sum, day) => sum + day.activeMs, 0)) < 1, 'A napi és havi időbecslés eltér.');
+  }
   assert(snapshot.schemaVersion === 1 && snapshot.source === 'codexpulse-local', 'Ismeretlen snapshot-verzió.');
   assert(Array.isArray(snapshot.tasks) && snapshot.tasks.length > 0, 'Nem található feldolgozott gyökérfeladat.');
   assert(Array.isArray(snapshot.months) && snapshot.months.length > 0, 'Nem található havi összegzés.');

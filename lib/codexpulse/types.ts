@@ -40,6 +40,13 @@ export type MonthRecord = {
   models: ModelUsage[];
   estimated: boolean;
   estimateReasons: string[];
+  timeEstimate?: {
+    method: 'root-turn-union-v1';
+    activeMs: number;
+    recordedTurns: number;
+    skippedTurns: number;
+    days: { date: string; activeMs: number }[];
+  };
 };
 
 export type TaskMonthSlice = {
