@@ -55,15 +55,26 @@ export function SettingsDialog({ language, snapshot, vault, demo, refreshing, of
       <DialogContent className="settings-dialog" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{t(language, 'settings')}</DialogTitle>
-          <DialogDescription>CodexPulse v1.5.1</DialogDescription>
+          <DialogDescription>CodexPulse v1.5.2</DialogDescription>
         </DialogHeader>
         <div className="settings-scroll">
           <section className="settings-section">
             <div className="settings-section-title"><Languages /><span>{t(language, 'language')}</span></div>
             <Select value={language} onValueChange={(value) => onLanguage(value as Language)}>
-              <SelectTrigger className="settings-select"><SelectValue>{language === 'hu' ? 'Magyar' : 'English'}</SelectValue></SelectTrigger>
-              <SelectContent><SelectItem value="hu">Magyar</SelectItem><SelectItem value="en">English</SelectItem></SelectContent>
+              <SelectTrigger className="settings-select" aria-label={t(language, 'language')}><SelectValue>{language === 'hu' ? 'Magyar' : 'English'}</SelectValue></SelectTrigger>
+              <SelectContent className="readable-select-options"><SelectItem value="hu">Magyar</SelectItem><SelectItem value="en">English</SelectItem></SelectContent>
             </Select>
+          </section>
+
+          <section className="settings-section backup-section">
+            <div className="settings-section-title"><LockKeyhole /><span>{language === 'hu' ? 'Mentés és visszaállítás' : 'Backup and restore'}</span></div>
+            <p className="settings-note">{language === 'hu' ? 'Mentsd a helyi besorolásokat és havi értékeléseket a Fájlokba. A visszaállításhoz ugyanaz a párosítás vagy helyreállítási kód szükséges. A mentés nem tartalmaz kulcsot vagy PIN-t.' : 'Save local corrections and monthly reviews to Files. Restoring requires the same pairing or recovery code. The backup contains no key or PIN.'}</p>
+            <Button variant="outline" className="settings-action" disabled={demo || backupBusy} onClick={() => void backupAction(onBackup)}>{language === 'hu' ? 'Titkosított mentés készítése' : 'Export encrypted backup'}</Button>
+            <label className="settings-note backup-file-label">{language === 'hu' ? 'Titkosított mentés visszaállítása' : 'Restore encrypted backup'}<Input type="file" accept=".json,application/json" disabled={demo || backupBusy} onChange={(event) => { setRestoreFile(event.target.files?.[0] || null); event.target.value = ''; }} /></label>
+            <AlertDialog open={Boolean(restoreFile)} onOpenChange={(open) => { if (!open) setRestoreFile(null); }}>
+              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{language === 'hu' ? 'Besorolások visszaállítása?' : 'Restore corrections?'}</AlertDialogTitle><AlertDialogDescription>{language === 'hu' ? 'A mentés lecseréli az eszköz jelenlegi besorolásait és havi értékeléseit. Előtte érdemes a jelenlegi állapotot is fájlba menteni.' : 'The backup replaces the current corrections and monthly reviews on this device. Export the current state first if you want to keep it.'}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>{t(language, 'cancel')}</AlertDialogCancel><AlertDialogAction onClick={() => { const file = restoreFile; setRestoreFile(null); if (file) void backupAction(() => onRestore(file)); }}>{t(language, 'restore')}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+            </AlertDialog>
+            {backupStatus && <output className="settings-note">{backupStatus}</output>}
           </section>
 
           <section className="settings-section">
@@ -86,7 +97,7 @@ export function SettingsDialog({ language, snapshot, vault, demo, refreshing, of
                     <label className="rule-switch"><span>{t(language, 'hide')}</span><Switch disabled={backupBusy} checked={Boolean(rule.hidden)} onCheckedChange={(checked) => onVault((current) => ({ ...current, projectRules: { ...current.projectRules, [project.id]: { ...current.projectRules[project.id], hidden: checked } } }))} /></label>
                     <Select disabled={backupBusy} value={rule.mergeInto || 'none'} onValueChange={(value) => onVault((current) => ({ ...current, projectRules: { ...current.projectRules, [project.id]: { ...current.projectRules[project.id], mergeInto: value === 'none' ? null : String(value) } } }))}>
                       <SelectTrigger className="merge-select" aria-label={`${t(language, 'merge')}: ${project.name}`}><SelectValue>{rule.mergeInto ? (vault.projectRules[rule.mergeInto]?.name || projects.find((item) => item.id === rule.mergeInto)?.name || rule.mergeInto) : (language === 'hu' ? 'Nincs összevonás' : 'No merge')}</SelectValue></SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="readable-select-options">
                         <SelectItem value="none">{language === 'hu' ? 'Nincs összevonás' : 'No merge'}</SelectItem>
                         {projects.filter((candidate) => canMergeProject(project.id, candidate.id, vault)).map((candidate) => <SelectItem value={candidate.id} key={candidate.id}>{candidate.name}</SelectItem>)}
                       </SelectContent>
@@ -100,13 +111,6 @@ export function SettingsDialog({ language, snapshot, vault, demo, refreshing, of
           <section className="settings-section">
             <div className="settings-section-title"><LockKeyhole /><span>{t(language, 'security')}</span></div>
             <p className="settings-note">{t(language, 'fiveMinuteLock')}</p>
-            <p className="settings-note">{language === 'hu' ? 'A besorolások és havi értékelések csak ezen az eszközön vannak. Mentsd őket a Fájlokba; a visszaállításhoz ugyanaz a párosítás (vagy annak helyreállítási kódja) szükséges. A mentés nem tartalmaz kulcsot vagy PIN-t.' : 'Corrections and monthly reviews live only on this device. Save them to Files; restoring requires the same pairing (or its recovery code). The backup contains no key or PIN.'}</p>
-            <Button variant="outline" className="settings-action" disabled={demo || backupBusy} onClick={() => void backupAction(onBackup)}>{language === 'hu' ? 'Titkosított besorolásmentés' : 'Export encrypted corrections'}</Button>
-            <label className="settings-note">{language === 'hu' ? 'Besorolásmentés visszaállítása' : 'Restore corrections backup'}<Input type="file" accept=".json,application/json" disabled={demo || backupBusy} onChange={(event) => { setRestoreFile(event.target.files?.[0] || null); event.target.value = ''; }} /></label>
-            <AlertDialog open={Boolean(restoreFile)} onOpenChange={(open) => { if (!open) setRestoreFile(null); }}>
-              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{language === 'hu' ? 'Besorolások visszaállítása?' : 'Restore corrections?'}</AlertDialogTitle><AlertDialogDescription>{language === 'hu' ? 'A mentés lecseréli az eszköz jelenlegi besorolásait és havi értékeléseit. Előtte érdemes a jelenlegi állapotot is fájlba menteni.' : 'The backup replaces the current corrections and monthly reviews on this device. Export the current state first if you want to keep it.'}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>{t(language, 'cancel')}</AlertDialogCancel><AlertDialogAction onClick={() => { const file = restoreFile; setRestoreFile(null); if (file) void backupAction(() => onRestore(file)); }}>{t(language, 'restore')}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-            </AlertDialog>
-            {backupStatus && <output className="settings-note">{backupStatus}</output>}
             {!demo && <Button variant="outline" className="settings-action" onClick={onLock}><LockKeyhole />{t(language, 'lockNow')}</Button>}
             <AlertDialog>
               <AlertDialogTrigger render={<Button variant="destructive" className="settings-action danger-action" />}><RotateCcw />{t(language, 'reset')}</AlertDialogTrigger>

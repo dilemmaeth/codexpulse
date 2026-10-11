@@ -139,13 +139,14 @@ export function MonthScreen({ language, view, months, selectedMonth, onMonth, ra
             </div>
           )}
         </div>
-        <div
+        <figure
           className="pulse-orbit"
-          style={{ '--pulse-value': `${Math.min(100, view.usageIndex ?? 0)}%` } as CSSProperties}
-          aria-label={percent(view.usageIndex)}
+          style={{ '--pulse-value': `${Math.min(100, view.resultsIndex ?? 0)}%` } as CSSProperties}
+          aria-label={`${t(language, 'resultsIndex')}: ${percent(view.resultsIndex)}. ${t(language, 'indexBaseline')}`}
         >
-          <div className="pulse-orbit-inner"><span>{percent(view.resultsIndex)}</span><small>{t(language, 'resultsIndex')}</small></div>
-        </div>
+          <figcaption className="pulse-orbit-inner"><span>{percent(view.resultsIndex)}</span><small>{t(language, 'resultsIndex')}</small></figcaption>
+        </figure>
+        <p className="index-baseline">{t(language, 'indexBaseline')}</p>
       </section>
       <section className="metric-row" aria-label={t(language, 'monthlyOverview')}>
         <Metric label={t(language, 'totalTokens')} value={compact(view.month.usage.totalTokens, language)} detail={t(language, 'withCache')} accent />
@@ -253,21 +254,22 @@ export function AnalysisScreen({ language, view, months, selectedMonth, onMonth,
   return (
     <div className="screen-stack">
       <MonthHeading language={language} selectedMonth={selectedMonth} months={months} onMonth={onMonth} />
-      <MonthReviewPanel key={selectedMonth} language={language} view={view} vault={vault} onVault={onVault} />
       <section className="analysis-index-grid">
         <article className="index-card"><Sparkles /><p>{t(language, 'usageIndex')}</p><strong>{percent(view.usageIndex)}</strong></article>
         <article className="index-card"><CheckCircle2 /><p>{t(language, 'resultsIndex')}</p><strong>{percent(view.resultsIndex)}</strong></article>
       </section>
+      <p className="index-baseline">{language === 'hu' ? '100% = a korábbi hónapok azonos időszakának átlaga; nem teljesítési százalék.' : '100% = the average for matching periods in previous months; not a completion percentage.'}</p>
+      <MonthReviewPanel key={selectedMonth} language={language} view={view} vault={vault} onVault={onVault} />
       <section className="panel">
-        <div className="panel-heading"><div><p className="eyebrow">Token</p><h2>{t(language, 'categoryBreakdown')}</h2></div>{view.month.estimated && <EstimateBadge language={language} />}</div>
+        <div className="panel-heading"><div><p className="eyebrow">Token</p><h2>{t(language, 'tokenComposition')}</h2></div>{view.month.estimated && <EstimateBadge language={language} />}</div>
         <div className="token-part-list">
           {tokenParts.map((part) => {
             const partValue = part.value ?? 0;
             const share = usage.totalTokens ? partValue / usage.totalTokens * 100 : 0;
-            return <div className="token-part" key={part.label}><span className={`part-icon tone-${part.color}`}><Layers3 /></span><div><span>{part.label}</span><strong>{part.value === null ? '—' : compact(partValue, language)}</strong></div><small>{part.value === null ? '—' : `${share.toFixed(1)}%`}</small></div>;
+            return <div className="token-part" key={part.label}><span className={`part-icon tone-${part.color}`}><Layers3 /></span><div><span>{part.label}</span><strong>{part.value === null ? '—' : compact(partValue, language)}</strong></div><small>{part.value === null ? '—' : `${new Intl.NumberFormat(dateLocale(language), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(share)}%`}</small></div>;
           })}
         </div>
-        {usage.costUSD !== null && <div className="cost-note"><div><span>{t(language, 'apiCost')}</span><strong>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(usage.costUSD)}</strong></div><p>{t(language, 'apiCostNote')}</p></div>}
+        {usage.costUSD !== null && <div className="cost-note"><div><span>{t(language, 'apiCost')}</span><strong>{new Intl.NumberFormat(dateLocale(language), { style: 'currency', currency: 'USD' }).format(usage.costUSD)}</strong></div><p>{t(language, 'apiCostNote')}</p></div>}
       </section>
       <section className="panel">
         <div className="panel-heading"><div><p className="eyebrow">{t(language, 'outcomes')}</p><h2>{t(language, 'resultsIndex')}</h2></div></div>
@@ -334,7 +336,7 @@ export function ReportScreen({ language, view, vault, onVault, months, selectedM
         <p>{period.comparison}</p>
       </section>
       <section className="panel report-controls">
-        <div className="report-language-control"><span>{t(language, 'reportLanguage')}</span><Select value={reportLanguage} onValueChange={(value) => setReportLanguage(value as Language)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="hu">Magyar</SelectItem><SelectItem value="en">English</SelectItem></SelectContent></Select></div>
+        <div className="report-language-control"><span>{t(language, 'reportLanguage')}</span><Select value={reportLanguage} onValueChange={(value) => setReportLanguage(value as Language)}><SelectTrigger aria-label={t(language, 'reportLanguage')}><SelectValue>{reportLanguage === 'hu' ? 'Magyar' : 'English'}</SelectValue></SelectTrigger><SelectContent className="readable-select-options"><SelectItem value="hu">Magyar</SelectItem><SelectItem value="en">English</SelectItem></SelectContent></Select></div>
         <div className="report-switch"><span><strong>{t(language, 'includeProjects')}</strong><small>{vault.reportIncludesProjects ? view.projects.slice(0, 3).map((item) => item.name).join(', ') : t(language, 'privateDetailsExcluded')}</small></span><Switch aria-label={t(language, 'includeProjects')} checked={vault.reportIncludesProjects} onCheckedChange={(checked) => onVault((current) => ({ ...current, reportIncludesProjects: checked }))} /></div>
         <div className="report-actions"><Button size="lg" disabled={busy} onClick={() => void create('png')}><Share2 />{t(language, 'png')}</Button><Button size="lg" variant="outline" disabled={busy} onClick={() => void create('pdf')}><Download />{t(language, 'pdf')}</Button></div>
         {status && <output className="report-status">{status}</output>}
