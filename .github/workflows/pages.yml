@@ -48,6 +48,12 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=moderate
 
+      - name: Install notification dependencies
+        run: npm ci --prefix workers/notifications --ignore-scripts
+
+      - name: Audit notification dependencies
+        run: npm audit --prefix workers/notifications --audit-level=moderate
+
       - name: Type-check
         run: npm run typecheck
 
@@ -57,8 +63,15 @@ jobs:
       - name: Lint application
         run: npm run lint
 
+      - name: Validate notification worker
+        run: |
+          npm run build --prefix workers/notifications
+          node scripts/check-codexpulse-notification-worker.mjs
+
       - name: Build static app
-        run: npm run build:pages
+        run: |
+          if [ -f public/codexpulse-data.enc.json ]; then node scripts/codexpulse-notification-metadata.mjs; fi
+          npm run build:pages
 
       - name: Configure Pages
         uses: actions/configure-pages@v6
